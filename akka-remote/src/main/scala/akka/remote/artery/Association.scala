@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote.artery
@@ -14,9 +14,11 @@ import java.util.concurrent.atomic.AtomicReference
 
 import scala.annotation.tailrec
 import scala.concurrent.Future
-import scala.concurrent.Promise
 import scala.concurrent.duration._
 import scala.util.control.NoStackTrace
+
+import com.github.ghik.silencer.silent
+import org.agrona.concurrent.ManyToOneConcurrentArrayQueue
 
 import akka.Done
 import akka.NotUsed
@@ -30,6 +32,7 @@ import akka.event.Logging
 import akka.remote.DaemonMsgCreate
 import akka.remote.PriorityMessage
 import akka.remote.RemoteActorRef
+import akka.remote.RemoteLogMarker
 import akka.remote.UniqueAddress
 import akka.remote.artery.ArteryTransport.AeronTerminated
 import akka.remote.artery.ArteryTransport.ShuttingDown
@@ -53,8 +56,6 @@ import akka.util.PrettyDuration._
 import akka.util.Unsafe
 import akka.util.WildcardIndex
 import akka.util.ccompat._
-import com.github.ghik.silencer.silent
-import org.agrona.concurrent.ManyToOneConcurrentArrayQueue
 
 /**
  * INTERNAL API
@@ -138,12 +139,11 @@ private[remote] class Association(
     extends AbstractAssociation
     with OutboundContext {
   import Association._
-  import FlightRecorderEvents._
 
   require(remoteAddress.port.nonEmpty)
 
-  private val log = Logging(transport.system, getClass.getName)
-  private def flightRecorder = transport.topLevelFlightRecorder
+  private val log = Logging.withMarker(transport.system, getClass)
+  private def flightRecorder = transport.flightRecorder
 
   override def settings = transport.settings
   private def advancedSettings = transport.settings.Advanced
@@ -232,8 +232,8 @@ private[remote] class Association(
         _outboundControlIngress match {
           case OptionVal.Some(o) => o
           case OptionVal.None =>
-            if (transport.isShutdown) throw ShuttingDown
-            else throw new IllegalStateException("outboundControlIngress not initialized yet")
+            if (transport.isShutdown || isRemovedAfterQuarantined()) throw ShuttingDown
+            else throw new IllegalStateException(s"outboundControlIngress for [$remoteAddress] not initialized yet")
         }
     }
   }
@@ -275,24 +275,23 @@ private[remote] class Association(
       s"wrong remote address in completeHandshake, got ${peer.address}, expected $remoteAddress")
     val current = associationState
 
-    current.uniqueRemoteAddressValue() match {
+    current.uniqueRemoteAddress() match {
       case Some(`peer`) =>
         // handshake already completed
         Future.successful(Done)
       case _ =>
         // clear outbound compression, it's safe to do that several times if someone else
         // completes handshake at same time, but it's important to clear it before
-        // we signal that the handshake is completed (uniqueRemoteAddressPromise.trySuccess)
         implicit val ec = transport.system.dispatchers.internalDispatcher
         clearOutboundCompression().map { _ =>
-          current.uniqueRemoteAddressPromise.trySuccess(peer)
-          current.uniqueRemoteAddressValue() match {
+          current.completeUniqueRemoteAddress(peer)
+          current.uniqueRemoteAddress() match {
             case Some(`peer`) =>
             // our value
             case _ =>
-              val newState = current.newIncarnation(Promise.successful(peer))
+              val newState = current.newIncarnation(peer)
               if (swapState(current, newState)) {
-                current.uniqueRemoteAddressValue() match {
+                current.uniqueRemoteAddress() match {
                   case Some(old) =>
                     cancelStopQuarantinedTimer()
                     log.debug(
@@ -349,7 +348,7 @@ private[remote] class Association(
       transport.system.eventStream
         .publish(Dropped(message, reason, env.sender.getOrElse(ActorRef.noSender), recipient.getOrElse(deadletters)))
 
-      flightRecorder.hiFreq(Transport_SendQueueOverflow, queueIndex)
+      flightRecorder.transportSendQueueOverflow(queueIndex)
       deadletters ! env
     }
 
@@ -468,7 +467,7 @@ private[remote] class Association(
 
   // OutboundContext
   override def quarantine(reason: String): Unit = {
-    val uid = associationState.uniqueRemoteAddressValue().map(_.uid)
+    val uid = associationState.uniqueRemoteAddress().map(_.uid)
     quarantine(reason, uid, harmless = false)
   }
 
@@ -476,7 +475,7 @@ private[remote] class Association(
     uid match {
       case Some(u) =>
         val current = associationState
-        current.uniqueRemoteAddressValue() match {
+        current.uniqueRemoteAddress() match {
           case Some(peer) if peer.uid == u =>
             if (!current.isQuarantined(u)) {
               val newState = current.newQuarantined()
@@ -493,6 +492,7 @@ private[remote] class Association(
                     .publish(GracefulShutdownQuarantinedEvent(UniqueAddress(remoteAddress, u), reason))
                 } else {
                   log.warning(
+                    RemoteLogMarker.quarantine(remoteAddress, Some(u)),
                     "Association to [{}] with UID [{}] is irrecoverably failed. UID is now quarantined and all " +
                     "messages to this UID will be delivered to dead letters. " +
                     "Remote ActorSystem must be restarted to recover from this situation. Reason: {}",
@@ -501,7 +501,7 @@ private[remote] class Association(
                     reason)
                   transport.system.eventStream.publish(QuarantinedEvent(UniqueAddress(remoteAddress, u)))
                 }
-                flightRecorder.loFreq(Transport_Quarantined, s"$remoteAddress - $u")
+                flightRecorder.transportQuarantined(remoteAddress, u)
                 clearOutboundCompression()
                 clearInboundCompression(u)
                 // end delivery of system messages to that incarnation after this point
@@ -516,6 +516,7 @@ private[remote] class Association(
             }
           case Some(peer) =>
             log.info(
+              RemoteLogMarker.quarantine(remoteAddress, Some(u)),
               "Quarantine of [{}] ignored due to non-matching UID, quarantine requested for [{}] but current is [{}]. {}",
               remoteAddress,
               u,
@@ -524,12 +525,16 @@ private[remote] class Association(
             send(ClearSystemMessageDelivery(current.incarnation - 1), OptionVal.None, OptionVal.None)
           case None =>
             log.info(
+              RemoteLogMarker.quarantine(remoteAddress, Some(u)),
               "Quarantine of [{}] ignored because handshake not completed, quarantine request was for old incarnation. {}",
               remoteAddress,
               reason)
         }
       case None =>
-        log.warning("Quarantine of [{}] ignored because unknown UID", remoteAddress)
+        log.warning(
+          RemoteLogMarker.quarantine(remoteAddress, None),
+          "Quarantine of [{}] ignored because unknown UID",
+          remoteAddress)
     }
 
   }
@@ -539,7 +544,7 @@ private[remote] class Association(
    */
   def removedAfterQuarantined(): Unit = {
     if (!isRemovedAfterQuarantined()) {
-      flightRecorder.loFreq(Transport_RemovedQuarantined, remoteAddress.toString)
+      flightRecorder.transportRemoveQuarantined(remoteAddress)
       queues(ControlQueueIndex) = RemovedQueueWrapper
 
       if (transport.largeMessageChannelEnabled)
@@ -619,7 +624,7 @@ private[remote] class Association(
                       case OptionVal.Some(k) =>
                         // for non-control streams we can stop the entire stream
                         log.info("Stopping idle outbound stream [{}] to [{}]", queueIndex, remoteAddress)
-                        flightRecorder.loFreq(Transport_StopIdleOutbound, s"$remoteAddress - $queueIndex")
+                        flightRecorder.transportStopIdleOutbound(remoteAddress, queueIndex)
                         setStopReason(queueIndex, OutboundStreamStopIdleSignal)
                         clearStreamKillSwitch(queueIndex, k)
                         k.abort(OutboundStreamStopIdleSignal)
@@ -632,7 +637,7 @@ private[remote] class Association(
                     associationState.controlIdleKillSwitch match {
                       case OptionVal.Some(killSwitch) =>
                         log.info("Stopping idle outbound control stream to [{}]", remoteAddress)
-                        flightRecorder.loFreq(Transport_StopIdleOutbound, s"$remoteAddress - $queueIndex")
+                        flightRecorder.transportStopIdleOutbound(remoteAddress, queueIndex)
                         setControlIdleKillSwitch(OptionVal.None)
                         killSwitch.abort(OutboundStreamStopIdleSignal)
                       case OptionVal.None => // already stopped
@@ -874,7 +879,7 @@ private[remote] class Association(
       restart: () => Unit): Unit = {
 
     def lazyRestart(): Unit = {
-      flightRecorder.loFreq(Transport_RestartOutbound, s"$remoteAddress - $streamName")
+      flightRecorder.transportRestartOutbound(remoteAddress, streamName)
       outboundCompressionAccess = Vector.empty
       if (queueIndex == ControlQueueIndex) {
         materializing = new CountDownLatch(1)

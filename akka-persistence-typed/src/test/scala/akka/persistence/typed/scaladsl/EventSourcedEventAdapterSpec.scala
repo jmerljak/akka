@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2019-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.persistence.typed.scaladsl
@@ -7,9 +7,12 @@ package akka.persistence.typed.scaladsl
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
+import com.typesafe.config.ConfigFactory
+import org.scalatest.wordspec.AnyWordSpecLike
+
+import akka.actor.testkit.typed.scaladsl.LogCapturing
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.actor.testkit.typed.scaladsl.TestProbe
-import akka.actor.testkit.typed.scaladsl.LogCapturing
 import akka.actor.typed.ActorRef
 import akka.actor.typed.scaladsl.Behaviors
 import akka.persistence.query.EventEnvelope
@@ -22,8 +25,6 @@ import akka.persistence.typed.PersistenceId
 import akka.serialization.jackson.CborSerializable
 import akka.stream.scaladsl.Sink
 import akka.testkit.JavaSerializable
-import com.typesafe.config.ConfigFactory
-import org.scalatest.WordSpecLike
 
 object EventSourcedEventAdapterSpec {
 
@@ -82,9 +83,8 @@ object EventSourcedEventAdapterSpec {
 
 class EventSourcedEventAdapterSpec
     extends ScalaTestWithActorTestKit(EventSourcedEventAdapterSpec.conf)
-    with WordSpecLike
+    with AnyWordSpecLike
     with LogCapturing {
-  import EventSourcedEventAdapterSpec._
   import EventSourcedBehaviorSpec.{
     counter,
     Command,
@@ -95,14 +95,13 @@ class EventSourcedEventAdapterSpec
     Incremented,
     State
   }
-
-  import akka.actor.typed.scaladsl.adapter._
+  import EventSourcedEventAdapterSpec._
 
   val pidCounter = new AtomicInteger(0)
-  private def nextPid(): PersistenceId = PersistenceId(s"c${pidCounter.incrementAndGet()})")
+  private def nextPid(): PersistenceId = PersistenceId.ofUniqueId(s"c${pidCounter.incrementAndGet()})")
 
   val queries: LeveldbReadJournal =
-    PersistenceQuery(system.toClassic).readJournalFor[LeveldbReadJournal](LeveldbReadJournal.Identifier)
+    PersistenceQuery(system).readJournalFor[LeveldbReadJournal](LeveldbReadJournal.Identifier)
 
   private def behavior(pid: PersistenceId, probe: ActorRef[String]): EventSourcedBehavior[String, String, String] =
     EventSourcedBehavior(pid, "", commandHandler = { (_, command) =>
@@ -193,7 +192,7 @@ class EventSourcedEventAdapterSpec
       replyProbe.expectMessage(State(1, Vector(0)))
 
       val events = queries.currentEventsByPersistenceId(pid.id).runWith(Sink.seq).futureValue
-      events shouldEqual List(EventEnvelope(Sequence(1), pid.id, 1, GenericWrapper(Incremented(1))))
+      events shouldEqual List(EventEnvelope(Sequence(1), pid.id, 1, GenericWrapper(Incremented(1)), 0L))
 
       val c2 =
         spawn(Behaviors.setup[Command](ctx => counter(ctx, pid).eventAdapter(new GenericWrapperEventAdapter[Event])))
@@ -214,8 +213,8 @@ class EventSourcedEventAdapterSpec
 
       val events = queries.currentEventsByPersistenceId(pid.id).runWith(Sink.seq).futureValue
       events shouldEqual List(
-        EventEnvelope(Sequence(1), pid.id, 1, GenericWrapper(Incremented(1))),
-        EventEnvelope(Sequence(2), pid.id, 2, GenericWrapper(Incremented(1))))
+        EventEnvelope(Sequence(1), pid.id, 1, GenericWrapper(Incremented(1)), 0L),
+        EventEnvelope(Sequence(2), pid.id, 2, GenericWrapper(Incremented(1)), 0L))
 
       val c2 =
         spawn(Behaviors.setup[Command](ctx => counter(ctx, pid).eventAdapter(new GenericWrapperEventAdapter[Event])))
@@ -234,7 +233,7 @@ class EventSourcedEventAdapterSpec
       replyProbe.expectMessage(State(1, Vector(0)))
 
       val events = queries.currentEventsByPersistenceId(pid.id).runWith(Sink.seq).futureValue
-      events shouldEqual List(EventEnvelope(Sequence(1), pid.id, 1, GenericWrapper(Incremented(1))))
+      events shouldEqual List(EventEnvelope(Sequence(1), pid.id, 1, GenericWrapper(Incremented(1)), 0L))
 
       val c2 =
         spawn(Behaviors.setup[Command](ctx => counter(ctx, pid).eventAdapter(new GenericWrapperEventAdapter[Event])))
@@ -242,7 +241,7 @@ class EventSourcedEventAdapterSpec
       replyProbe.expectMessage(State(1, Vector(0)))
 
       val taggedEvents = queries.currentEventsByTag("tag99").runWith(Sink.seq).futureValue
-      taggedEvents shouldEqual List(EventEnvelope(Sequence(1), pid.id, 1, GenericWrapper(Incremented(1))))
+      taggedEvents shouldEqual List(EventEnvelope(Sequence(1), pid.id, 1, GenericWrapper(Incremented(1)), 0L))
     }
   }
 }

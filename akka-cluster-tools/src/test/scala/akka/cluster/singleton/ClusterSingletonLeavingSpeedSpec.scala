@@ -1,10 +1,12 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster.singleton
 
 import scala.concurrent.duration._
+
+import com.typesafe.config.ConfigFactory
 
 import akka.actor.Actor
 import akka.actor.ActorRef
@@ -17,7 +19,6 @@ import akka.cluster.MemberStatus
 import akka.cluster.singleton.ClusterSingletonLeavingSpeedSpec.TheSingleton
 import akka.testkit.AkkaSpec
 import akka.testkit.TestProbe
-import com.typesafe.config.ConfigFactory
 
 object ClusterSingletonLeavingSpeedSpec {
 
@@ -44,7 +45,8 @@ class ClusterSingletonLeavingSpeedSpec
       """
   akka.loglevel = DEBUG
   akka.actor.provider = akka.cluster.ClusterActorRefProvider
-  akka.cluster.auto-down-unreachable-after = 2s
+  akka.cluster.downing-provider-class = akka.cluster.testkit.AutoDowning
+  akka.cluster.testkit.auto-down-unreachable-after = 2s
 
   # With 10 systems and setting min-number-of-hand-over-retries to 5 and gossip-interval to 2s it's possible to
   # reproduce the ClusterSingletonManagerIsStuck and slow hand over in issue #25639

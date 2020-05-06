@@ -1,14 +1,16 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster
 
+import scala.concurrent.duration._
+
 import com.typesafe.config.ConfigFactory
+
 import akka.remote.testkit.MultiNodeConfig
 import akka.remote.testkit.MultiNodeSpec
 import akka.testkit._
-import scala.concurrent.duration._
 
 object NodeDowningAndBeingRemovedMultiJvmSpec extends MultiNodeConfig {
   val first = role("first")
@@ -18,7 +20,7 @@ object NodeDowningAndBeingRemovedMultiJvmSpec extends MultiNodeConfig {
   commonConfig(
     debugConfig(on = false).withFallback(
       ConfigFactory
-        .parseString("akka.cluster.auto-down-unreachable-after = off")
+        .parseString("akka.cluster.testkit.auto-down-unreachable-after = off")
         .withFallback(MultiNodeClusterSpec.clusterConfig)))
 }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package jdocs.actor.typed;
@@ -9,6 +9,14 @@ import akka.actor.typed.javadsl.*;
 
 // #print-actor
 class PrintActor extends AbstractBehavior<Integer> {
+
+  public static Behavior<Integer> create() {
+    return Behaviors.setup(PrintActor::new);
+  }
+
+  private PrintActor(ActorContext<Integer> context) {
+    super(context);
+  }
 
   @Override
   public Receive<Integer> createReceive() {

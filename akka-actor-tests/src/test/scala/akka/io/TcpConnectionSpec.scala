@@ -1,38 +1,37 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.io
 
 import java.io.IOException
 import java.net.{ InetSocketAddress, ServerSocket }
+import java.net.SocketTimeoutException
 import java.nio.ByteBuffer
 import java.nio.channels._
-import java.nio.channels.spi.SelectorProvider
 import java.nio.channels.SelectionKey._
-
-import com.typesafe.config.ConfigFactory
+import java.nio.channels.spi.SelectorProvider
+import java.nio.file.Files
+import java.util.Random
 
 import scala.annotation.tailrec
 import scala.collection.immutable
 import scala.concurrent.duration._
-import scala.util.control.NonFatal
-import org.scalatest.matchers._
-import akka.io.Tcp._
-import akka.io.SelectionHandler._
-import akka.io.Inet.SocketOption
-import akka.actor._
-import akka.testkit.{ AkkaSpec, EventFilter, SocketUtil, TestActorRef, TestProbe }
-import akka.util.{ ByteString, Helpers }
-import akka.testkit.SocketUtil.temporaryServerAddress
-import java.util.Random
-import java.net.SocketTimeoutException
-import java.nio.file.Files
-
-import akka.testkit.WithLogCapturing
-import com.google.common.jimfs.{ Configuration, Jimfs }
-
 import scala.util.Try
+import scala.util.control.NonFatal
+
+import com.google.common.jimfs.{ Configuration, Jimfs }
+import com.typesafe.config.ConfigFactory
+import org.scalatest.matchers._
+
+import akka.actor._
+import akka.io.Inet.SocketOption
+import akka.io.SelectionHandler._
+import akka.io.Tcp._
+import akka.testkit.{ AkkaSpec, EventFilter, SocketUtil, TestActorRef, TestProbe }
+import akka.testkit.SocketUtil.temporaryServerAddress
+import akka.testkit.WithLogCapturing
+import akka.util.{ ByteString, Helpers }
 
 object TcpConnectionSpec {
   case class Ack(i: Int) extends Event
@@ -45,7 +44,6 @@ class TcpConnectionSpec extends AkkaSpec("""
     akka.loggers = ["akka.testkit.SilenceAllTestEventListener"]
     akka.io.tcp.trace-logging = on
     akka.io.tcp.register-timeout = 500ms
-    akka.actor.serialize-creators = on
     """) with WithLogCapturing { thisSpecs =>
   import TcpConnectionSpec._
 
@@ -465,9 +463,9 @@ class TcpConnectionSpec extends AkkaSpec("""
 
         val buffer = ByteBuffer.allocate(1)
         val thrown = the[IOException] thrownBy {
-            windowsWorkaroundToDetectAbort()
-            serverSideChannel.read(buffer)
-          }
+          windowsWorkaroundToDetectAbort()
+          serverSideChannel.read(buffer)
+        }
         thrown.getMessage should ===(ConnectionResetByPeerMessage)
       }
     }
@@ -655,7 +653,7 @@ class TcpConnectionSpec extends AkkaSpec("""
       override lazy val connectionActor = createConnectionActorWithoutRegistration(serverAddress = address)
       run {
         connectionActor ! newChannelRegistration
-        userHandler.expectMsg(30.seconds, CommandFailed(Connect(address)))
+        userHandler.expectMsg(15.seconds, CommandFailed(Connect(address)))
       }
     }
 

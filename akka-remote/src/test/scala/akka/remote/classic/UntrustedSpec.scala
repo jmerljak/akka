@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote.classic
@@ -7,9 +7,11 @@ package akka.remote.classic
 import scala.concurrent.duration._
 
 import com.typesafe.config.ConfigFactory
+
 import akka.actor.Actor
 import akka.actor.ActorIdentity
 import akka.actor.ActorRef
+import akka.actor.ActorSelection
 import akka.actor.ActorSystem
 import akka.actor.Deploy
 import akka.actor.ExtendedActorSystem
@@ -18,14 +20,13 @@ import akka.actor.PoisonPill
 import akka.actor.Props
 import akka.actor.RootActorPath
 import akka.actor.Terminated
-import akka.testkit.AkkaSpec
-import akka.testkit.ImplicitSender
-import akka.testkit.TestProbe
-import akka.actor.ActorSelection
-import akka.testkit.TestEvent
 import akka.event.Logging
+import akka.testkit.AkkaSpec
 import akka.testkit.EventFilter
+import akka.testkit.ImplicitSender
 import akka.testkit.JavaSerializable
+import akka.testkit.TestEvent
+import akka.testkit.TestProbe
 
 object UntrustedSpec {
   final case class IdentifyReq(path: String) extends JavaSerializable

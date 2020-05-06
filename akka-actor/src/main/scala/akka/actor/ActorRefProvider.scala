@@ -1,26 +1,26 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor
 
-import akka.dispatch.sysmsg._
-import akka.dispatch.{ Mailboxes, RequiresMessageQueue, UnboundedMessageQueueSemantics }
-import akka.routing._
-import akka.event._
-import akka.util.Helpers
-import akka.util.Collections.EmptyImmutableSeq
-import scala.util.control.NonFatal
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.concurrent.{ ExecutionContextExecutor, Future, Promise }
 import scala.annotation.implicitNotFound
+import scala.concurrent.{ ExecutionContextExecutor, Future, Promise }
+import scala.util.control.NonFatal
 
 import akka.ConfigurationException
 import akka.annotation.DoNotInherit
 import akka.annotation.InternalApi
+import akka.dispatch.{ Mailboxes, RequiresMessageQueue, UnboundedMessageQueueSemantics }
 import akka.dispatch.Dispatchers
+import akka.dispatch.sysmsg._
+import akka.event._
+import akka.routing._
 import akka.serialization.Serialization
+import akka.util.Collections.EmptyImmutableSeq
+import akka.util.Helpers
 import akka.util.OptionVal
 
 /**
@@ -57,6 +57,9 @@ import akka.util.OptionVal
    * Dead letter destination for this provider.
    */
   def deadLetters: ActorRef
+
+  /** INTERNAL API */
+  @InternalApi private[akka] def ignoreRef: ActorRef
 
   /**
    * The root path for all actors within this actor system, not including any remote address information.
@@ -153,6 +156,13 @@ import akka.util.OptionVal
 
   /** INTERNAL API */
   @InternalApi private[akka] def serializationInformation: Serialization.Information
+
+  /**
+   * INTERNAL API
+   */
+  @InternalApi
+  private[akka] def addressString: String
+
 }
 
 /**
@@ -179,7 +189,7 @@ trait ActorRefFactory {
   implicit def dispatcher: ExecutionContextExecutor
 
   /**
-   * Father of all children created by this interface.
+   * Parent of all children created by this interface.
    *
    * INTERNAL API
    */
@@ -383,6 +393,8 @@ private[akka] class LocalActorRefProvider private[akka] (
     _deadLetters
       .getOrElse((p: ActorPath) => new DeadLetterActorRef(this, p, eventStream))
       .apply(rootPath / "deadLetters")
+
+  override val ignoreRef: ActorRef = new IgnoreActorRef(this)
 
   private[this] final val terminationPromise: Promise[Terminated] = Promise[Terminated]()
 
@@ -727,6 +739,19 @@ private[akka] class LocalActorRefProvider private[akka] (
           serializationInformationCache = OptionVal.Some(info)
           info
         }
+    }
+  }
+
+  // lazily initialized with fallback since it can depend on transport which is not initialized up front
+  // worth caching since if it is used once in a system it will very likely be used many times
+  @volatile private var _addressString: OptionVal[String] = OptionVal.None
+  override private[akka] def addressString: String = {
+    _addressString match {
+      case OptionVal.Some(addr) => addr
+      case OptionVal.None =>
+        val addr = getDefaultAddress.toString
+        _addressString = OptionVal.Some(addr)
+        addr
     }
   }
 }

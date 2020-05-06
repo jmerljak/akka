@@ -1,26 +1,13 @@
 /*
- * Copyright (C) 2015-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2015-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.javadsl
 
 import java.util.Optional
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionStage
 import java.util.function.BiFunction
-
-import akka.Done
-import akka.NotUsed
-import akka.actor.ActorRef
-import akka.actor.ClassicActorSystemProvider
-import akka.dispatch.ExecutionContexts
-import akka.japi
-import akka.japi.function
-import akka.stream._
-import akka.stream.impl.LinearTraversalBuilder
-import akka.stream.javadsl
-import akka.stream.scaladsl
-import org.reactivestreams.Publisher
-import org.reactivestreams.Subscriber
 
 import scala.annotation.unchecked.uncheckedVariance
 import scala.collection.immutable
@@ -28,6 +15,16 @@ import scala.compat.java8.FutureConverters._
 import scala.compat.java8.OptionConverters._
 import scala.concurrent.ExecutionContext
 import scala.util.Try
+
+import org.reactivestreams.{ Publisher, Subscriber }
+
+import akka._
+import akka.actor.{ ActorRef, ClassicActorSystemProvider, Status }
+import akka.dispatch.ExecutionContexts
+import akka.japi.function
+import akka.japi.function.Creator
+import akka.stream.{ javadsl, scaladsl, _ }
+import akka.stream.impl.LinearTraversalBuilder
 
 /** Java API */
 object Sink {
@@ -120,7 +117,7 @@ object Sink {
       f: function.Function[T, CompletionStage[Void]]): Sink[T, CompletionStage[Done]] =
     new Sink(
       scaladsl.Sink
-        .foreachAsync(parallelism)((x: T) => f(x).toScala.map(_ => ())(ExecutionContexts.sameThreadExecutionContext))
+        .foreachAsync(parallelism)((x: T) => f(x).toScala.map(_ => ())(ExecutionContexts.parasitic))
         .toCompletionStage())
 
   /**
@@ -167,10 +164,7 @@ object Sink {
    * See also [[head]].
    */
   def headOption[In](): Sink[In, CompletionStage[Optional[In]]] =
-    new Sink(
-      scaladsl.Sink
-        .headOption[In]
-        .mapMaterializedValue(_.map(_.asJava)(ExecutionContexts.sameThreadExecutionContext).toJava))
+    new Sink(scaladsl.Sink.headOption[In].mapMaterializedValue(_.map(_.asJava)(ExecutionContexts.parasitic).toJava))
 
   /**
    * A `Sink` that materializes into a `CompletionStage` of the last value received.
@@ -190,10 +184,7 @@ object Sink {
    * See also [[head]], [[takeLast]].
    */
   def lastOption[In](): Sink[In, CompletionStage[Optional[In]]] =
-    new Sink(
-      scaladsl.Sink
-        .lastOption[In]
-        .mapMaterializedValue(_.map(_.asJava)(ExecutionContexts.sameThreadExecutionContext).toJava))
+    new Sink(scaladsl.Sink.lastOption[In].mapMaterializedValue(_.map(_.asJava)(ExecutionContexts.parasitic).toJava))
 
   /**
    * A `Sink` that materializes into a a `CompletionStage` of `List<In>` containing the last `n` collected elements.
@@ -207,7 +198,7 @@ object Sink {
     new Sink(
       scaladsl.Sink
         .takeLast[In](n)
-        .mapMaterializedValue(fut => fut.map(sq => sq.asJava)(ExecutionContexts.sameThreadExecutionContext).toJava))
+        .mapMaterializedValue(fut => fut.map(sq => sq.asJava)(ExecutionContexts.parasitic).toJava))
   }
 
   /**
@@ -223,9 +214,7 @@ object Sink {
   def seq[In]: Sink[In, CompletionStage[java.util.List[In]]] = {
     import akka.util.ccompat.JavaConverters._
     new Sink(
-      scaladsl.Sink
-        .seq[In]
-        .mapMaterializedValue(fut => fut.map(sq => sq.asJava)(ExecutionContexts.sameThreadExecutionContext).toJava))
+      scaladsl.Sink.seq[In].mapMaterializedValue(fut => fut.map(sq => sq.asJava)(ExecutionContexts.parasitic).toJava))
   }
 
   /**
@@ -245,7 +234,7 @@ object Sink {
    *
    */
   def actorRef[In](ref: ActorRef, onCompleteMessage: Any): Sink[In, NotUsed] =
-    new Sink(scaladsl.Sink.actorRef[In](ref, onCompleteMessage))
+    new Sink(scaladsl.Sink.actorRef[In](ref, onCompleteMessage, (t: Throwable) => Status.Failure(t)))
 
   /**
    * Sends the elements of the stream to the given `ActorRef` that sends back back-pressure signal.
@@ -260,6 +249,33 @@ object Sink {
    * When the stream is completed with failure - result of `onFailureMessage(throwable)`
    * message will be sent to the destination actor.
    */
+  def actorRefWithBackpressure[In](
+      ref: ActorRef,
+      onInitMessage: Any,
+      ackMessage: Any,
+      onCompleteMessage: Any,
+      onFailureMessage: function.Function[Throwable, Any]): Sink[In, NotUsed] =
+    new Sink(
+      scaladsl.Sink
+        .actorRefWithBackpressure[In](ref, onInitMessage, ackMessage, onCompleteMessage, t => onFailureMessage(t)))
+
+  /**
+   * Sends the elements of the stream to the given `ActorRef` that sends back back-pressure signal.
+   * First element is always `onInitMessage`, then stream is waiting for acknowledgement message
+   * `ackMessage` from the given actor which means that it is ready to process
+   * elements. It also requires `ackMessage` message after each stream element
+   * to make backpressure work.
+   *
+   * If the target actor terminates the stream will be canceled.
+   * When the stream is completed successfully the given `onCompleteMessage`
+   * will be sent to the destination actor.
+   * When the stream is completed with failure - result of `onFailureMessage(throwable)`
+   * message will be sent to the destination actor.
+   *
+   * @deprecated Use actorRefWithBackpressure instead
+   */
+  @Deprecated
+  @deprecated("Use actorRefWithBackpressure instead", "2.6.0")
   def actorRefWithAck[In](
       ref: ActorRef,
       onInitMessage: Any,
@@ -267,7 +283,8 @@ object Sink {
       onCompleteMessage: Any,
       onFailureMessage: function.Function[Throwable, Any]): Sink[In, NotUsed] =
     new Sink(
-      scaladsl.Sink.actorRefWithAck[In](ref, onInitMessage, ackMessage, onCompleteMessage, onFailureMessage.apply _))
+      scaladsl.Sink
+        .actorRefWithBackpressure[In](ref, onInitMessage, ackMessage, onCompleteMessage, t => onFailureMessage(t)))
 
   /**
    * A graph with the shape of a sink logically is a sink, this method makes
@@ -314,6 +331,27 @@ object Sink {
    * [[akka.stream.javadsl.SinkQueueWithCancel.pull]] method is pulling element from the stream and returns ``CompletionStage[Option[T]]``.
    * `CompletionStage` completes when element is available.
    *
+   * Before calling pull method second time you need to ensure that number of pending pulls is less then ``maxConcurrentPulls``
+   * or wait until some of the previous Futures completes.
+   * Pull returns Failed future with ''IllegalStateException'' if there will be more then ``maxConcurrentPulls`` number of pending pulls.
+   *
+   * `Sink` will request at most number of elements equal to size of `inputBuffer` from
+   * upstream and then stop back pressure.  You can configure size of input
+   * buffer by using [[Sink.withAttributes]] method.
+   *
+   * For stream completion you need to pull all elements from [[akka.stream.javadsl.SinkQueueWithCancel]] including last None
+   * as completion marker
+   *
+   * @see [[akka.stream.javadsl.SinkQueueWithCancel]]
+   */
+  def queue[T](maxConcurrentPulls: Int): Sink[T, SinkQueueWithCancel[T]] =
+    new Sink(scaladsl.Sink.queue[T](maxConcurrentPulls).mapMaterializedValue(_.asJava))
+
+  /**
+   * Creates a `Sink` that is materialized as an [[akka.stream.javadsl.SinkQueueWithCancel]].
+   * [[akka.stream.javadsl.SinkQueueWithCancel.pull]] method is pulling element from the stream and returns ``CompletionStage[Option[T]]``.
+   * `CompletionStage` completes when element is available.
+   *
    * Before calling pull method second time you need to wait until previous CompletionStage completes.
    * Pull returns Failed future with ''IllegalStateException'' if previous future has not yet completed.
    *
@@ -326,8 +364,7 @@ object Sink {
    *
    * @see [[akka.stream.javadsl.SinkQueueWithCancel]]
    */
-  def queue[T](): Sink[T, SinkQueueWithCancel[T]] =
-    new Sink(scaladsl.Sink.queue[T]().mapMaterializedValue(_.asJava))
+  def queue[T](): Sink[T, SinkQueueWithCancel[T]] = queue(1)
 
   /**
    * Creates a real `Sink` upon receiving the first element. Internal `Sink` will not be created if there are no elements,
@@ -338,17 +375,14 @@ object Sink {
    * sink fails then the `Future` is completed with the exception.
    * Otherwise the `Future` is completed with the materialized value of the internal sink.
    */
-  @Deprecated
-  @deprecated(
-    "Use lazyInitAsync instead. (lazyInitAsync no more needs a fallback function and the materialized value more clearly indicates if the internal sink was materialized or not.)",
-    "2.5.11")
+  @deprecated("Use 'Sink.lazyCompletionStageSink' in combination with 'Flow.prefixAndTail(1)' instead", "2.6.0")
   def lazyInit[T, M](
       sinkFactory: function.Function[T, CompletionStage[Sink[T, M]]],
       fallback: function.Creator[M]): Sink[T, CompletionStage[M]] =
     new Sink(
       scaladsl.Sink
         .lazyInit[T, M](
-          t => sinkFactory.apply(t).toScala.map(_.asScala)(ExecutionContexts.sameThreadExecutionContext),
+          t => sinkFactory.apply(t).toScala.map(_.asScala)(ExecutionContexts.parasitic),
           () => fallback.create())
         .mapMaterializedValue(_.toJava))
 
@@ -361,18 +395,51 @@ object Sink {
    * sink fails then the `Future` is completed with the exception.
    * Otherwise the `Future` is completed with the materialized value of the internal sink.
    */
+  @deprecated("Use 'Sink.lazyCompletionStageSink' instead", "2.6.0")
   def lazyInitAsync[T, M](
       sinkFactory: function.Creator[CompletionStage[Sink[T, M]]]): Sink[T, CompletionStage[Optional[M]]] = {
     val sSink = scaladsl.Sink
-      .lazyInitAsync[T, M](() =>
-        sinkFactory.create().toScala.map(_.asScala)(ExecutionContexts.sameThreadExecutionContext))
-      .mapMaterializedValue(
-        fut =>
-          fut
-            .map(_.fold(Optional.empty[M]())(m => Optional.ofNullable(m)))(ExecutionContexts.sameThreadExecutionContext)
-            .toJava)
+      .lazyInitAsync[T, M](() => sinkFactory.create().toScala.map(_.asScala)(ExecutionContexts.parasitic))
+      .mapMaterializedValue(fut =>
+        fut.map(_.fold(Optional.empty[M]())(m => Optional.ofNullable(m)))(ExecutionContexts.parasitic).toJava)
     new Sink(sSink)
   }
+
+  /**
+   * Turn a `Future[Sink]` into a Sink that will consume the values of the source when the future completes successfully.
+   * If the `Future` is completed with a failure the stream is failed.
+   *
+   * The materialized future value is completed with the materialized value of the future sink or failed with a
+   * [[NeverMaterializedException]] if upstream fails or downstream cancels before the future has completed.
+   */
+  def completionStageSink[T, M](future: CompletionStage[Sink[T, M]]): Sink[T, CompletionStage[M]] =
+    lazyCompletionStageSink[T, M](() => future)
+
+  /**
+   * Defers invoking the `create` function to create a sink until there is a first element passed from upstream.
+   *
+   * The materialized future value is completed with the materialized value of the created sink when that has successfully
+   * been materialized.
+   *
+   * If the `create` function throws or returns or the stream fails to materialize, in this
+   * case the materialized future value is failed with a [[akka.stream.NeverMaterializedException]].
+   */
+  def lazySink[T, M](create: Creator[Sink[T, M]]): Sink[T, CompletionStage[M]] =
+    lazyCompletionStageSink(() => CompletableFuture.completedFuture(create.create()))
+
+  /**
+   * Defers invoking the `create` function to create a future sink until there is a first element passed from upstream.
+   *
+   * The materialized future value is completed with the materialized value of the created sink when that has successfully
+   * been materialized.
+   *
+   * If the `create` function throws or returns a future that is failed, or the stream fails to materialize, in this
+   * case the materialized future value is failed with a [[akka.stream.NeverMaterializedException]].
+   */
+  def lazyCompletionStageSink[T, M](create: Creator[CompletionStage[Sink[T, M]]]): Sink[T, CompletionStage[M]] =
+    new Sink(scaladsl.Sink.lazyFutureSink { () =>
+      create.create().toScala.map(_.asScala)((ExecutionContexts.parasitic))
+    }).mapMaterializedValue(_.toJava)
 }
 
 /**

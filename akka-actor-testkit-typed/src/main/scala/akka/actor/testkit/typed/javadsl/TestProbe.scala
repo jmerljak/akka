@@ -1,12 +1,12 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.testkit.typed.javadsl
 
 import java.time.Duration
-import java.util.function.Supplier
 import java.util.{ List => JList }
+import java.util.function.Supplier
 
 import akka.actor.testkit.typed.FishingOutcome
 import akka.actor.testkit.typed.TestKitSettings
@@ -197,9 +197,9 @@ abstract class TestProbe[M] {
    * Java API: Allows for flexible matching of multiple messages within a timeout, the fisher function is fed each incoming
    * message, and returns one of the following effects to decide on what happens next:
    *
-   *  * [[FishingOutcomes.continue()]] - continue with the next message given that the timeout has not been reached
-   *  * [[FishingOutcomes.complete()]] - successfully complete and return the message
-   *  * [[FishingOutcomes.fail(errorMsg)]] - fail the test with a custom message
+   *  * [[FishingOutcomes.continue]] - continue with the next message given that the timeout has not been reached
+   *  * [[FishingOutcomes.complete]] - successfully complete and return the message
+   *  * [[FishingOutcomes.fail]] - fail the test with a custom message
    *
    * Additionally failures includes the list of messages consumed. If a message of type `M` but not of type `T` is
    * received this will also fail the test, additionally if the `fisher` function throws a match error the error

@@ -1,27 +1,27 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.serialization
 
-import com.typesafe.config.Config
-import akka.actor._
-import akka.event.{ LogMarker, Logging, LoggingAdapter }
-import java.util.concurrent.ConcurrentHashMap
-
-import scala.collection.mutable.ArrayBuffer
 import java.io.NotSerializableException
-
-import scala.util.{ DynamicVariable, Failure, Try }
-import scala.collection.immutable
-import scala.util.control.NonFatal
-import scala.util.Success
 import java.nio.ByteBuffer
+import java.util.NoSuchElementException
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.annotation.tailrec
-import java.util.NoSuchElementException
+import scala.collection.immutable
+import scala.collection.mutable.ArrayBuffer
+import scala.util.{ DynamicVariable, Failure, Try }
+import scala.util.Success
+import scala.util.control.NonFatal
+
+import com.typesafe.config.Config
+
+import akka.actor._
 import akka.annotation.InternalApi
+import akka.event.{ LogMarker, Logging, LoggingAdapter }
 import akka.util.ccompat._
 
 @ccompatUsedUntil213

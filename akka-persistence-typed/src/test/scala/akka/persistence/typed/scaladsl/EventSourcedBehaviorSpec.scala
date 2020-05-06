@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.persistence.typed.scaladsl
@@ -14,6 +14,10 @@ import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
 
+import com.typesafe.config.Config
+import com.typesafe.config.ConfigFactory
+import org.scalatest.wordspec.AnyWordSpecLike
+
 import akka.Done
 import akka.actor.ActorInitializationException
 import akka.actor.testkit.typed.TestException
@@ -25,26 +29,23 @@ import akka.actor.typed.SupervisorStrategy
 import akka.actor.typed.Terminated
 import akka.actor.typed.scaladsl.ActorContext
 import akka.actor.typed.scaladsl.Behaviors
+import akka.persistence.{ SnapshotMetadata => ClassicSnapshotMetadata }
+import akka.persistence.{ SnapshotSelectionCriteria => ClassicSnapshotSelectionCriteria }
 import akka.persistence.SelectedSnapshot
+import akka.persistence.typed.SnapshotSelectionCriteria
 import akka.persistence.journal.inmem.InmemJournal
 import akka.persistence.query.EventEnvelope
 import akka.persistence.query.PersistenceQuery
 import akka.persistence.query.Sequence
 import akka.persistence.query.journal.leveldb.scaladsl.LeveldbReadJournal
 import akka.persistence.snapshot.SnapshotStore
-import akka.persistence.typed.ExpectingReply
 import akka.persistence.typed.PersistenceId
 import akka.persistence.typed.RecoveryCompleted
 import akka.persistence.typed.SnapshotCompleted
 import akka.persistence.typed.SnapshotFailed
 import akka.persistence.typed.SnapshotMetadata
-import akka.persistence.{ SnapshotMetadata => ClassicSnapshotMetadata }
-import akka.persistence.{ SnapshotSelectionCriteria => ClassicSnapshotSelectionCriteria }
 import akka.serialization.jackson.CborSerializable
 import akka.stream.scaladsl.Sink
-import com.typesafe.config.Config
-import com.typesafe.config.ConfigFactory
-import org.scalatest.WordSpecLike
 
 object EventSourcedBehaviorSpec {
 
@@ -75,7 +76,7 @@ object EventSourcedBehaviorSpec {
     }
   }
 
-  // also used from PersistentActorTest
+  // also used from PersistentActorTest, EventSourcedBehaviorWatchSpec
   def conf: Config = ConfigFactory.parseString(s"""
     akka.loglevel = INFO
     # akka.persistence.typed.log-stashing = on
@@ -92,24 +93,22 @@ object EventSourcedBehaviorSpec {
     """)
 
   sealed trait Command extends CborSerializable
-  final case object Increment extends Command
-  final case object IncrementThenLogThenStop extends Command
-  final case object IncrementTwiceThenLogThenStop extends Command
+  case object Increment extends Command
+  case object IncrementThenLogThenStop extends Command
+  case object IncrementTwiceThenLogThenStop extends Command
   final case class IncrementWithPersistAll(nr: Int) extends Command
-  final case object IncrementLater extends Command
-  final case object IncrementAfterReceiveTimeout extends Command
-  final case object IncrementTwiceAndThenLog extends Command
-  final case class IncrementWithConfirmation(override val replyTo: ActorRef[Done])
-      extends Command
-      with ExpectingReply[Done]
-  final case object DoNothingAndThenLog extends Command
-  final case object EmptyEventsListAndThenLog extends Command
+  case object IncrementLater extends Command
+  case object IncrementAfterReceiveTimeout extends Command
+  case object IncrementTwiceAndThenLog extends Command
+  final case class IncrementWithConfirmation(replyTo: ActorRef[Done]) extends Command
+  case object DoNothingAndThenLog extends Command
+  case object EmptyEventsListAndThenLog extends Command
   final case class GetValue(replyTo: ActorRef[State]) extends Command
-  final case object DelayFinished extends Command
+  case object DelayFinished extends Command
   private case object Timeout extends Command
-  final case object LogThenStop extends Command
-  final case object Fail extends Command
-  final case object StopIt extends Command
+  case object LogThenStop extends Command
+  case object Fail extends Command
+  case object StopIt extends Command
 
   sealed trait Event extends CborSerializable
   final case class Incremented(delta: Int) extends Event
@@ -133,9 +132,9 @@ object EventSourcedBehaviorSpec {
     counter(
       ctx,
       persistenceId,
-      loggingActor = TestProbe[String].ref,
-      probe = TestProbe[(State, Event)].ref,
-      snapshotProbe = TestProbe[Try[SnapshotMetadata]].ref)
+      loggingActor = TestProbe[String]().ref,
+      probe = TestProbe[(State, Event)]().ref,
+      snapshotProbe = TestProbe[Try[SnapshotMetadata]]().ref)
 
   def counter(ctx: ActorContext[Command], persistenceId: PersistenceId, logging: ActorRef[String])(
       implicit system: ActorSystem[_]): EventSourcedBehavior[Command, Event, State] =
@@ -143,8 +142,8 @@ object EventSourcedBehaviorSpec {
       ctx,
       persistenceId,
       loggingActor = logging,
-      probe = TestProbe[(State, Event)].ref,
-      TestProbe[Try[SnapshotMetadata]].ref)
+      probe = TestProbe[(State, Event)]().ref,
+      TestProbe[Try[SnapshotMetadata]]().ref)
 
   def counterWithProbe(
       ctx: ActorContext[Command],
@@ -152,18 +151,18 @@ object EventSourcedBehaviorSpec {
       probe: ActorRef[(State, Event)],
       snapshotProbe: ActorRef[Try[SnapshotMetadata]])(
       implicit system: ActorSystem[_]): EventSourcedBehavior[Command, Event, State] =
-    counter(ctx, persistenceId, TestProbe[String].ref, probe, snapshotProbe)
+    counter(ctx, persistenceId, TestProbe[String]().ref, probe, snapshotProbe)
 
   def counterWithProbe(ctx: ActorContext[Command], persistenceId: PersistenceId, probe: ActorRef[(State, Event)])(
       implicit system: ActorSystem[_]): EventSourcedBehavior[Command, Event, State] =
-    counter(ctx, persistenceId, TestProbe[String].ref, probe, TestProbe[Try[SnapshotMetadata]].ref)
+    counter(ctx, persistenceId, TestProbe[String]().ref, probe, TestProbe[Try[SnapshotMetadata]]().ref)
 
   def counterWithSnapshotProbe(
       ctx: ActorContext[Command],
       persistenceId: PersistenceId,
       probe: ActorRef[Try[SnapshotMetadata]])(
       implicit system: ActorSystem[_]): EventSourcedBehavior[Command, Event, State] =
-    counter(ctx, persistenceId, TestProbe[String].ref, TestProbe[(State, Event)].ref, snapshotProbe = probe)
+    counter(ctx, persistenceId, TestProbe[String]().ref, TestProbe[(State, Event)]().ref, snapshotProbe = probe)
 
   def counter(
       ctx: ActorContext[Command],
@@ -185,7 +184,7 @@ object EventSourcedBehaviorSpec {
               .thenRun { (_: State) =>
                 loggingActor ! firstLogging
               }
-              .thenStop
+              .thenStop()
 
           case IncrementTwiceThenLogThenStop =>
             Effect
@@ -193,13 +192,13 @@ object EventSourcedBehaviorSpec {
               .thenRun { (_: State) =>
                 loggingActor ! firstLogging
               }
-              .thenStop
+              .thenStop()
 
           case IncrementWithPersistAll(n) =>
             Effect.persist((0 until n).map(_ => Incremented(1)))
 
-          case cmd: IncrementWithConfirmation =>
-            Effect.persist(Incremented(1)).thenReply(cmd)(_ => Done)
+          case IncrementWithConfirmation(replyTo) =>
+            Effect.persist(Incremented(1)).thenReply(replyTo)(_ => Done)
 
           case GetValue(replyTo) =>
             replyTo ! state
@@ -208,7 +207,7 @@ object EventSourcedBehaviorSpec {
           case IncrementLater =>
             // purpose is to test signals
             val delay = ctx.spawnAnonymous(Behaviors.withTimers[Tick.type] { timers =>
-              timers.startSingleTimer(Tick, Tick, 10.millis)
+              timers.startSingleTimer(Tick, 10.millis)
               Behaviors.receive((_, msg) =>
                 msg match {
                   case Tick => Behaviors.stopped
@@ -256,7 +255,7 @@ object EventSourcedBehaviorSpec {
               .thenRun { _ =>
                 loggingActor ! firstLogging
               }
-              .thenStop
+              .thenStop()
 
           case Fail =>
             throw new TestException("boom!")
@@ -282,33 +281,32 @@ object EventSourcedBehaviorSpec {
 
 class EventSourcedBehaviorSpec
     extends ScalaTestWithActorTestKit(EventSourcedBehaviorSpec.conf)
-    with WordSpecLike
+    with AnyWordSpecLike
     with LogCapturing {
 
   import EventSourcedBehaviorSpec._
-  import akka.actor.typed.scaladsl.adapter._
 
   val queries: LeveldbReadJournal =
-    PersistenceQuery(system.toClassic).readJournalFor[LeveldbReadJournal](LeveldbReadJournal.Identifier)
+    PersistenceQuery(system).readJournalFor[LeveldbReadJournal](LeveldbReadJournal.Identifier)
 
   val pidCounter = new AtomicInteger(0)
-  private def nextPid(): PersistenceId = PersistenceId(s"c${pidCounter.incrementAndGet()})")
+  private def nextPid(): PersistenceId = PersistenceId.ofUniqueId(s"c${pidCounter.incrementAndGet()})")
 
   "A typed persistent actor" must {
 
     "persist an event" in {
-      val c = spawn(counter(nextPid))
-      val probe = TestProbe[State]
+      val c = spawn(counter(nextPid()))
+      val probe = TestProbe[State]()
       c ! Increment
       c ! GetValue(probe.ref)
       probe.expectMessage(State(1, Vector(0)))
     }
 
     "replay stored events" in {
-      val pid = nextPid
+      val pid = nextPid()
       val c = spawn(counter(pid))
 
-      val probe = TestProbe[State]
+      val probe = TestProbe[State]()
       c ! Increment
       c ! Increment
       c ! Increment
@@ -324,8 +322,8 @@ class EventSourcedBehaviorSpec
     }
 
     "handle Terminated signal" in {
-      val c = spawn(counter(nextPid))
-      val probe = TestProbe[State]
+      val c = spawn(counter(nextPid()))
+      val probe = TestProbe[State]()
       c ! Increment
       c ! IncrementLater
       eventually {
@@ -335,9 +333,9 @@ class EventSourcedBehaviorSpec
     }
 
     "handle receive timeout" in {
-      val c = spawn(counter(nextPid))
+      val c = spawn(counter(nextPid()))
 
-      val probe = TestProbe[State]
+      val probe = TestProbe[State]()
       c ! Increment
       c ! IncrementAfterReceiveTimeout
       // let it timeout
@@ -348,15 +346,82 @@ class EventSourcedBehaviorSpec
       }
     }
 
+    "adhere default and disabled Recovery strategies" in {
+      val pid = nextPid()
+      val probe = TestProbe[State]
+
+      def counterWithRecoveryStrategy(recoveryStrategy: Recovery) =
+        Behaviors.setup[Command](counter(_, pid).withRecovery(recoveryStrategy))
+
+      val counterSetup = spawn(counterWithRecoveryStrategy(Recovery.default))
+      counterSetup ! Increment
+      counterSetup ! Increment
+      counterSetup ! Increment
+      counterSetup ! GetValue(probe.ref)
+      probe.expectMessage(State(3, Vector(0, 1, 2)))
+
+      val counterDefaultRecoveryStrategy = spawn(counterWithRecoveryStrategy(Recovery.default))
+      counterSetup ! Increment
+      counterDefaultRecoveryStrategy ! GetValue(probe.ref)
+      probe.expectMessage(State(4, Vector(0, 1, 2, 3)))
+
+      val counterDisabledRecoveryStrategy = spawn(counterWithRecoveryStrategy(Recovery.disabled))
+      counterDisabledRecoveryStrategy ! Increment
+      counterDisabledRecoveryStrategy ! Increment
+      counterDisabledRecoveryStrategy ! GetValue(probe.ref)
+      probe.expectMessage(State(2, Vector(0, 1)))
+    }
+
+    "adhere Recovery strategy with SnapshotSelectionCriteria" in {
+      val pid = nextPid()
+      val eventProbe = TestProbe[(State, Event)]
+      val commandProbe = TestProbe[State]
+      val snapshotProbe = TestProbe[Try[SnapshotMetadata]]
+
+      def counterWithSnapshotSelectionCriteria(recoveryStrategy: Recovery) =
+        Behaviors.setup[Command](
+          counterWithProbe(_, pid, eventProbe.ref, snapshotProbe.ref).withRecovery(recoveryStrategy).snapshotWhen {
+            case (_, _, _) => true
+          })
+
+      val counterSetup = spawn(counterWithSnapshotSelectionCriteria(Recovery.default))
+      counterSetup ! Increment
+      counterSetup ! Increment
+      counterSetup ! Increment
+      eventProbe.receiveMessages(3)
+      snapshotProbe.receiveMessages(3)
+      counterSetup ! GetValue(commandProbe.ref)
+      commandProbe.expectMessage(State(3, Vector(0, 1, 2)))
+
+      val counterWithSnapshotSelectionCriteriaNone = spawn(
+        counterWithSnapshotSelectionCriteria(Recovery.withSnapshotSelectionCriteria(SnapshotSelectionCriteria.none)))
+      // replay all events, no snapshot
+      eventProbe.expectMessage(State(0, Vector.empty) -> Incremented(1))
+      eventProbe.expectMessage(State(1, Vector(0)) -> Incremented(1))
+      eventProbe.expectMessage(State(2, Vector(0, 1)) -> Incremented(1))
+      counterWithSnapshotSelectionCriteriaNone ! Increment
+      eventProbe.expectMessage(State(3, Vector(0, 1, 2)) -> Incremented(1))
+      counterWithSnapshotSelectionCriteriaNone ! GetValue(commandProbe.ref)
+      commandProbe.expectMessage(State(4, Vector(0, 1, 2, 3)))
+
+      val counterWithSnapshotSelectionCriteriaLatest = spawn(
+        counterWithSnapshotSelectionCriteria(Recovery.withSnapshotSelectionCriteria(SnapshotSelectionCriteria.latest)))
+      // replay no events, only latest snapshot
+      eventProbe.expectNoMessage()
+      counterWithSnapshotSelectionCriteriaLatest ! Increment
+      counterWithSnapshotSelectionCriteriaLatest ! GetValue(commandProbe.ref)
+      commandProbe.expectMessage(State(5, Vector(0, 1, 2, 3, 4)))
+    }
+
     /**
      * Verify that all side-effects callbacks are called (in order) and only once.
      * The [[IncrementTwiceAndThenLog]] command will emit two Increment events
      */
     "chainable side effects with events" in {
-      val loggingProbe = TestProbe[String]
-      val c = spawn(counter(nextPid, loggingProbe.ref))
+      val loggingProbe = TestProbe[String]()
+      val c = spawn(counter(nextPid(), loggingProbe.ref))
 
-      val probe = TestProbe[State]
+      val probe = TestProbe[State]()
 
       c ! IncrementTwiceAndThenLog
       c ! GetValue(probe.ref)
@@ -367,8 +432,8 @@ class EventSourcedBehaviorSpec
     }
 
     "persist then stop" in {
-      val loggingProbe = TestProbe[String]
-      val c = spawn(counter(nextPid, loggingProbe.ref))
+      val loggingProbe = TestProbe[String]()
+      val c = spawn(counter(nextPid(), loggingProbe.ref))
       val watchProbe = watcher(c)
 
       c ! IncrementThenLogThenStop
@@ -377,8 +442,8 @@ class EventSourcedBehaviorSpec
     }
 
     "persist(All) then stop" in {
-      val loggingProbe = TestProbe[String]
-      val c = spawn(counter(nextPid, loggingProbe.ref))
+      val loggingProbe = TestProbe[String]()
+      val c = spawn(counter(nextPid(), loggingProbe.ref))
       val watchProbe = watcher(c)
 
       c ! IncrementTwiceThenLogThenStop
@@ -388,8 +453,8 @@ class EventSourcedBehaviorSpec
     }
 
     "persist an event thenReply" in {
-      val c = spawn(counter(nextPid))
-      val probe = TestProbe[Done]
+      val c = spawn(counter(nextPid()))
+      val probe = TestProbe[Done]()
       c ! IncrementWithConfirmation(probe.ref)
       probe.expectMessage(Done)
 
@@ -401,10 +466,10 @@ class EventSourcedBehaviorSpec
 
     /** Proves that side-effects are called when emitting an empty list of events */
     "chainable side effects without events" in {
-      val loggingProbe = TestProbe[String]
-      val c = spawn(counter(nextPid, loggingProbe.ref))
+      val loggingProbe = TestProbe[String]()
+      val c = spawn(counter(nextPid(), loggingProbe.ref))
 
-      val probe = TestProbe[State]
+      val probe = TestProbe[State]()
       c ! EmptyEventsListAndThenLog
       c ! GetValue(probe.ref)
       probe.expectMessage(State(0, Vector.empty))
@@ -413,10 +478,10 @@ class EventSourcedBehaviorSpec
 
     /** Proves that side-effects are called when explicitly calling Effect.none */
     "chainable side effects when doing nothing (Effect.none)" in {
-      val loggingProbe = TestProbe[String]
-      val c = spawn(counter(nextPid, loggingProbe.ref))
+      val loggingProbe = TestProbe[String]()
+      val c = spawn(counter(nextPid(), loggingProbe.ref))
 
-      val probe = TestProbe[State]
+      val probe = TestProbe[State]()
       c ! DoNothingAndThenLog
       c ! GetValue(probe.ref)
       probe.expectMessage(State(0, Vector.empty))
@@ -424,9 +489,9 @@ class EventSourcedBehaviorSpec
     }
 
     "work when wrapped in other behavior" in {
-      val probe = TestProbe[State]
+      val probe = TestProbe[State]()
       val behavior = Behaviors
-        .supervise[Command](counter(nextPid))
+        .supervise[Command](counter(nextPid()))
         .onFailure(SupervisorStrategy.restartWithBackoff(1.second, 10.seconds, 0.1))
       val c = spawn(behavior)
       c ! Increment
@@ -435,8 +500,8 @@ class EventSourcedBehaviorSpec
     }
 
     "stop after logging (no persisting)" in {
-      val loggingProbe = TestProbe[String]
-      val c: ActorRef[Command] = spawn(counter(nextPid, loggingProbe.ref))
+      val loggingProbe = TestProbe[String]()
+      val c: ActorRef[Command] = spawn(counter(nextPid(), loggingProbe.ref))
       val watchProbe = watcher(c)
       c ! LogThenStop
       loggingProbe.expectMessage(firstLogging)
@@ -444,8 +509,8 @@ class EventSourcedBehaviorSpec
     }
 
     "wrap persistent behavior in tap" in {
-      val probe = TestProbe[Command]
-      val wrapped: Behavior[Command] = Behaviors.monitor(probe.ref, counter(nextPid))
+      val probe = TestProbe[Command]()
+      val wrapped: Behavior[Command] = Behaviors.monitor(probe.ref, counter(nextPid()))
       val c = spawn(wrapped)
 
       c ! Increment
@@ -456,7 +521,7 @@ class EventSourcedBehaviorSpec
     }
 
     "tag events" in {
-      val pid = nextPid
+      val pid = nextPid()
       val c = spawn(Behaviors.setup[Command](ctx => counter(ctx, pid).withTagger(_ => Set("tag1", "tag2"))))
       val replyProbe = TestProbe[State]()
 
@@ -465,17 +530,17 @@ class EventSourcedBehaviorSpec
       replyProbe.expectMessage(State(1, Vector(0)))
 
       val events = queries.currentEventsByTag("tag1").runWith(Sink.seq).futureValue
-      events shouldEqual List(EventEnvelope(Sequence(1), pid.id, 1, Incremented(1)))
+      events shouldEqual List(EventEnvelope(Sequence(1), pid.id, 1, Incremented(1), 0L))
     }
 
     "handle scheduled message arriving before recovery completed " in {
       val c = spawn(Behaviors.withTimers[Command] { timers =>
-        timers.startSingleTimer("tick", Increment, 1.millis)
+        timers.startSingleTimer(Increment, 1.millis)
         Thread.sleep(30) // now it's probably already in the mailbox, and will be stashed
-        counter(nextPid)
+        counter(nextPid())
       })
 
-      val probe = TestProbe[State]
+      val probe = TestProbe[State]()
       c ! Increment
       probe.awaitAssert {
         c ! GetValue(probe.ref)
@@ -486,11 +551,11 @@ class EventSourcedBehaviorSpec
     "handle scheduled message arriving after recovery completed " in {
       val c = spawn(Behaviors.withTimers[Command] { timers =>
         // probably arrives after recovery completed
-        timers.startSingleTimer("tick", Increment, 200.millis)
-        counter(nextPid)
+        timers.startSingleTimer(Increment, 200.millis)
+        counter(nextPid())
       })
 
-      val probe = TestProbe[State]
+      val probe = TestProbe[State]()
       c ! Increment
       probe.awaitAssert {
         c ! GetValue(probe.ref)
@@ -499,14 +564,14 @@ class EventSourcedBehaviorSpec
     }
 
     "fail after recovery timeout" in {
-      LoggingEventFilter.error("Persistence failure when replaying snapshot").intercept {
+      LoggingTestKit.error("Exception during recovery from snapshot").expect {
         val c = spawn(
           Behaviors.setup[Command](ctx =>
-            counter(ctx, nextPid)
+            counter(ctx, nextPid())
               .withSnapshotPluginId("slow-snapshot-store")
               .withJournalPluginId("short-recovery-timeout")))
 
-        val probe = TestProbe[State]
+        val probe = TestProbe[State]()
 
         probe.expectTerminated(c, probe.remainingOrDefault)
       }
@@ -514,7 +579,7 @@ class EventSourcedBehaviorSpec
 
     "not wrap a failure caused by command stashed while recovering in a journal failure" in {
       val pid = nextPid()
-      val probe = TestProbe[AnyRef]
+      val probe = TestProbe[AnyRef]()
 
       // put some events in there, so that recovering takes a little time
       val c = spawn(Behaviors.setup[Command](counter(_, pid)))
@@ -525,7 +590,7 @@ class EventSourcedBehaviorSpec
       c ! StopIt
       probe.expectTerminated(c)
 
-      LoggingEventFilter.error[TestException].intercept {
+      LoggingTestKit.error[TestException].expect {
         val c2 = spawn(Behaviors.setup[Command](counter(_, pid)))
         c2 ! Fail
         probe.expectTerminated(c2) // should fail
@@ -534,47 +599,38 @@ class EventSourcedBehaviorSpec
 
     "fail fast if persistenceId is null" in {
       intercept[IllegalArgumentException] {
-        PersistenceId(null)
+        PersistenceId.ofUniqueId(null)
       }
-      val probe = TestProbe[AnyRef]
-      LoggingEventFilter
-        .error[ActorInitializationException]
-        .withMessageContains("persistenceId must not be null")
-        .intercept {
-          val ref = spawn(Behaviors.setup[Command](counter(_, persistenceId = PersistenceId(null))))
-          probe.expectTerminated(ref)
-        }
-      LoggingEventFilter
-        .error[ActorInitializationException]
-        .withMessageContains("persistenceId must not be null")
-        .intercept {
-          val ref = spawn(Behaviors.setup[Command](counter(_, persistenceId = null)))
-          probe.expectTerminated(ref)
-        }
+      val probe = TestProbe[AnyRef]()
+      LoggingTestKit.error[ActorInitializationException].withMessageContains("persistenceId must not be null").expect {
+        val ref = spawn(Behaviors.setup[Command](counter(_, persistenceId = PersistenceId.ofUniqueId(null))))
+        probe.expectTerminated(ref)
+      }
+      LoggingTestKit.error[ActorInitializationException].withMessageContains("persistenceId must not be null").expect {
+        val ref = spawn(Behaviors.setup[Command](counter(_, persistenceId = null)))
+        probe.expectTerminated(ref)
+      }
     }
 
     "fail fast if persistenceId is empty" in {
       intercept[IllegalArgumentException] {
-        PersistenceId("")
+        PersistenceId.ofUniqueId("")
       }
-      val probe = TestProbe[AnyRef]
-      LoggingEventFilter
-        .error[ActorInitializationException]
-        .withMessageContains("persistenceId must not be empty")
-        .intercept {
-          val ref = spawn(Behaviors.setup[Command](counter(_, persistenceId = PersistenceId(""))))
-          probe.expectTerminated(ref)
-        }
+      val probe = TestProbe[AnyRef]()
+      LoggingTestKit.error[ActorInitializationException].withMessageContains("persistenceId must not be empty").expect {
+        val ref = spawn(Behaviors.setup[Command](counter(_, persistenceId = PersistenceId.ofUniqueId(""))))
+        probe.expectTerminated(ref)
+      }
     }
 
     "fail fast if default journal plugin is not defined" in {
       // new ActorSystem without persistence config
       val testkit2 = ActorTestKit(ActorTestKitBase.testNameFromCallStack(), ConfigFactory.parseString(""))
       try {
-        LoggingEventFilter
+        LoggingTestKit
           .error[ActorInitializationException]
           .withMessageContains("Default journal plugin is not configured")
-          .intercept {
+          .expect {
             val ref = testkit2.spawn(Behaviors.setup[Command](counter(_, nextPid())))
             val probe = testkit2.createTestProbe()
             probe.expectTerminated(ref)
@@ -588,10 +644,10 @@ class EventSourcedBehaviorSpec
       // new ActorSystem without persistence config
       val testkit2 = ActorTestKit(ActorTestKitBase.testNameFromCallStack(), ConfigFactory.parseString(""))
       try {
-        LoggingEventFilter
+        LoggingTestKit
           .error[ActorInitializationException]
           .withMessageContains("Journal plugin [missing] configuration doesn't exist")
-          .intercept {
+          .expect {
             val ref = testkit2.spawn(Behaviors.setup[Command](counter(_, nextPid()).withJournalPluginId("missing")))
             val probe = testkit2.createTestProbe()
             probe.expectTerminated(ref)
@@ -610,9 +666,9 @@ class EventSourcedBehaviorSpec
           akka.persistence.journal.plugin = "akka.persistence.journal.leveldb"
           """))
       try {
-        LoggingEventFilter
+        LoggingTestKit
           .warn("No default snapshot store configured")
-          .intercept {
+          .expect {
             val ref = testkit2.spawn(Behaviors.setup[Command](counter(_, nextPid())))
             val probe = testkit2.createTestProbe[State]()
             // verify that it's not terminated
@@ -633,10 +689,10 @@ class EventSourcedBehaviorSpec
           akka.persistence.journal.plugin = "akka.persistence.journal.leveldb"
           """))
       try {
-        LoggingEventFilter
+        LoggingTestKit
           .error[ActorInitializationException]
           .withMessageContains("Snapshot store plugin [missing] configuration doesn't exist")
-          .intercept {
+          .expect {
             val ref = testkit2.spawn(Behaviors.setup[Command](counter(_, nextPid()).withSnapshotPluginId("missing")))
             val probe = testkit2.createTestProbe()
             probe.expectTerminated(ref)

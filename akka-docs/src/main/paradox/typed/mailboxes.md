@@ -1,8 +1,11 @@
 # Mailboxes
 
+For the Akka Classic documentation of this feature see @ref:[Classic Mailboxes](../mailboxes.md).
+
 ## Dependency
 
-Mailboxes are part of core Akka, which means that they are part of the akka-actor-typed dependency:
+Mailboxes are part of core Akka, which means that they are part of the `akka-actor` dependency. This
+page describes how to use mailboxes with `akka-actor-typed`, which has dependency:
 
 @@dependency[sbt,Maven,Gradle] {
   group="com.typesafe.akka"
@@ -39,60 +42,9 @@ Java
 
 @@snip [MailboxDocSpec.scala](/akka-actor-typed-tests/src/test/resources/mailbox-config-sample.conf) { }
 
-### Requiring a Message Queue Type for a Dispatcher
-
-A dispatcher may also have a requirement for the mailbox type used by the
-actors running on it. An example is the @apidoc[BalancingDispatcher] which requires a
-message queue that is thread-safe for multiple concurrent consumers. Such a
-requirement is formulated within the dispatcher configuration section:
-
-```
-my-dispatcher {
-  mailbox-requirement = org.example.MyInterface
-}
-```
-
-The given requirement names a class or interface which will then be ensured to
-be a supertype of the message queue's implementation. In case of a
-conflict—e.g. if the actor requires a mailbox type which does not satisfy this
-requirement—then actor creation will fail.
-
-### How the Mailbox Type is Selected
-
-When an actor is created, the `ActorRefProvider` first determines the
-dispatcher which will execute it. Then the mailbox is determined as follows:
-
- 1. If the actor's deployment configuration section contains a `mailbox` key,
-this refers to a configuration section describing the mailbox type.
- 2. If the actor's `Props` contains a mailbox selection then that names a configuration section describing the
-mailbox type to be used. This needs to be an absolute config path,
-for example `myapp.special-mailbox`, and is not nested inside the `akka` namespace.
- 3. If the dispatcher's configuration section contains a `mailbox-type` key
-the same section will be used to configure the mailbox type.
- 4. If the actor requires a mailbox type as described above then the mapping for
-that requirement will be used to determine the mailbox type to be used; if
-that fails then the dispatcher's requirement—if any—will be tried instead.
- 5. If the dispatcher requires a mailbox type as described above then the
-mapping for that requirement will be used to determine the mailbox type to
-be used.
- 6. The default mailbox `akka.actor.default-mailbox` will be used.
-
 ### Default Mailbox
 
-The default mailbox is used when the mailbox is not specified.
-This is an unbounded mailbox, backed by a
-`java.util.concurrent.ConcurrentLinkedQueue`.
-
-`SingleConsumerOnlyUnboundedMailbox` is an even more efficient mailbox, and
-it can be used as the default mailbox, but it cannot be used with a BalancingDispatcher.
-
-Configuration of `SingleConsumerOnlyUnboundedMailbox` as default mailbox:
-
-```
-akka.actor.default-mailbox {
-  mailbox-type = "akka.dispatch.SingleConsumerOnlyUnboundedMailbox"
-}
-```
+The default mailbox is used when the mailbox is not specified and is the **SingleConsumerOnlyUnboundedMailbox**>
 
 ### Which Configuration is passed to the Mailbox Type
 
@@ -108,19 +60,19 @@ fall-back to the default mailbox configuration section.
 Akka ships with a number of mailbox implementations:
 
  * 
-   **UnboundedMailbox** (default)
-    * The default mailbox
-    * Backed by a `java.util.concurrent.ConcurrentLinkedQueue`
-    * Blocking: No
-    * Bounded: No
-    * Configuration name: `"unbounded"` or `"akka.dispatch.UnboundedMailbox"`
- * 
-   **SingleConsumerOnlyUnboundedMailbox**
-   Depending on your use case, this queue may or may not be faster than the default one — be sure to benchmark properly!
+   **SingleConsumerOnlyUnboundedMailbox** (default)
+    * This is the default
     * Backed by a Multiple-Producer Single-Consumer queue, cannot be used with `BalancingDispatcher`
     * Blocking: No
     * Bounded: No
     * Configuration name: `"akka.dispatch.SingleConsumerOnlyUnboundedMailbox"`
+ * 
+   **UnboundedMailbox**
+    * Backed by a `java.util.concurrent.ConcurrentLinkedQueue`
+    * Blocking: No
+    * Bounded: No
+    * Configuration name: `"unbounded"` or `"akka.dispatch.UnboundedMailbox"`
+
  * 
    **NonBlockingBoundedMailbox**
     * Backed by a very efficient Multiple-Producer Single-Consumer queue
@@ -133,21 +85,21 @@ Akka ships with a number of mailbox implementations:
     * Backed by two `java.util.concurrent.ConcurrentLinkedQueue`
     * Blocking: No
     * Bounded: No
-    * Configuration name: "akka.dispatch.UnboundedControlAwareMailbox"
+    * Configuration name: `"akka.dispatch.UnboundedControlAwareMailbox"`
  * 
    **UnboundedPriorityMailbox**
     * Backed by a `java.util.concurrent.PriorityBlockingQueue`
     * Delivery order for messages of equal priority is undefined - contrast with the UnboundedStablePriorityMailbox
     * Blocking: No
     * Bounded: No
-    * Configuration name: "akka.dispatch.UnboundedPriorityMailbox"
+    * Configuration name: `"akka.dispatch.UnboundedPriorityMailbox"`
  * 
    **UnboundedStablePriorityMailbox**
     * Backed by a `java.util.concurrent.PriorityBlockingQueue` wrapped in an `akka.util.PriorityQueueStabilizer`
     * FIFO order is preserved for messages of equal priority - contrast with the UnboundedPriorityMailbox
     * Blocking: No
     * Bounded: No
-    * Configuration name: "akka.dispatch.UnboundedStablePriorityMailbox"
+    * Configuration name: `"akka.dispatch.UnboundedStablePriorityMailbox"`
 
 Other bounded mailbox implementations which will block the sender if the capacity is reached and
 configured with non-zero `mailbox-push-timeout-time`. 
@@ -162,7 +114,7 @@ The following mailboxes should only be used with zero `mailbox-push-timeout-time
     * Backed by a `java.util.concurrent.LinkedBlockingQueue`
     * Blocking: Yes if used with non-zero `mailbox-push-timeout-time`, otherwise No
     * Bounded: Yes
-    * Configuration name: "bounded" or "akka.dispatch.BoundedMailbox"
+    * Configuration name: `"bounded"` or `"akka.dispatch.BoundedMailbox"`
  * **BoundedPriorityMailbox**
     * Backed by a `java.util.PriorityQueue` wrapped in an `akka.util.BoundedBlockingQueue`
     * Delivery order for messages of equal priority is undefined - contrast with the `BoundedStablePriorityMailbox`
@@ -174,13 +126,13 @@ The following mailboxes should only be used with zero `mailbox-push-timeout-time
     * FIFO order is preserved for messages of equal priority - contrast with the BoundedPriorityMailbox
     * Blocking: Yes if used with non-zero `mailbox-push-timeout-time`, otherwise No
     * Bounded: Yes
-    * Configuration name: "akka.dispatch.BoundedStablePriorityMailbox"
+    * Configuration name: `"akka.dispatch.BoundedStablePriorityMailbox"`
  * **BoundedControlAwareMailbox**
     * Delivers messages that extend `akka.dispatch.ControlMessage` with higher priority
     * Backed by two `java.util.concurrent.ConcurrentLinkedQueue` and blocking on enqueue if capacity has been reached
     * Blocking: Yes if used with non-zero `mailbox-push-timeout-time`, otherwise No
     * Bounded: Yes
-    * Configuration name: "akka.dispatch.BoundedControlAwareMailbox"
+    * Configuration name: `"akka.dispatch.BoundedControlAwareMailbox"`
 
 ## Custom Mailbox type
 

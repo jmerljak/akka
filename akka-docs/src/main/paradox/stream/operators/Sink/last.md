@@ -4,27 +4,15 @@ Materializes into a @scala[`Future`] @java[`CompletionStage`] which will complet
 
 @ref[Sink operators](../index.md#sink-operators)
 
-@@@div { .group-scala }
-
 ## Signature
 
-@@signature [Sink.scala](/akka-stream/src/main/scala/akka/stream/scaladsl/Sink.scala) { #last }
+@apidoc[Sink.last](Sink$) { scala="#last[T]:akka.stream.scaladsl.Sink[T,scala.concurrent.Future[T]]" java="#last()" }
 
-@@@
 
 ## Description
 
 Materializes into a @scala[`Future`] @java[`CompletionStage`] which will complete with the last value emitted when the stream
 completes. If the stream completes with no elements the @scala[`Future`] @java[`CompletionStage`] is failed.
-
-
-@@@div { .callout }
-
-**cancels** never
-
-**backpressures** never
-
-@@@
 
 ## Example
 
@@ -33,3 +21,13 @@ Scala
 
 Java
 :   @@snip [SinkDocExamples.java](/akka-docs/src/test/java/jdocs/stream/operators/SinkDocExamples.java) { #last-operator-example }
+
+## Reactive Streams semantics
+
+@@@div { .callout }
+
+**cancels** never
+
+**backpressures** never
+
+@@@

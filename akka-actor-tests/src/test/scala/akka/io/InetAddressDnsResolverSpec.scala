@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.io
@@ -7,15 +7,15 @@ package akka.io
 import java.security.Security
 import java.util.concurrent.TimeUnit
 
+import com.github.ghik.silencer.silent
+
 import akka.actor.Props
 import akka.testkit.{ AkkaSpec, TestActorRef }
-import com.github.ghik.silencer.silent
 
 @silent
 class InetAddressDnsResolverSpec extends AkkaSpec("""
     akka.io.dns.inet-address.positive-ttl = default
     akka.io.dns.inet-address.negative-ttl = default
-    akka.actor.serialize-creators = on
     """) { thisSpecs =>
 
   "The DNS resolver default ttl's" must {
@@ -124,7 +124,6 @@ class InetAddressDnsResolverSpec extends AkkaSpec("""
 class InetAddressDnsResolverConfigSpec extends AkkaSpec("""
     akka.io.dns.inet-address.positive-ttl = forever
     akka.io.dns.inet-address.negative-ttl = never
-    akka.actor.serialize-creators = on
     """) {
   thisSpecs =>
 

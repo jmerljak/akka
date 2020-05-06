@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote.serialization
@@ -8,12 +8,12 @@ import java.io.NotSerializableException
 
 import akka.actor.{ ActorRef, Address, ExtendedActorSystem }
 import akka.protobufv3.internal.MessageLite
-import akka.remote.RemoteWatcher.ArteryHeartbeatRsp
-import akka.remote.artery.OutboundHandshake.{ HandshakeReq, HandshakeRsp }
-import akka.remote.artery.compress.CompressionProtocol._
-import akka.remote.artery.compress.{ CompressionProtocol, CompressionTable }
-import akka.remote.artery.{ ActorSystemTerminating, ActorSystemTerminatingAck, Quarantined, SystemMessageDelivery }
 import akka.remote._
+import akka.remote.RemoteWatcher.ArteryHeartbeatRsp
+import akka.remote.artery.{ ActorSystemTerminating, ActorSystemTerminatingAck, Quarantined, SystemMessageDelivery }
+import akka.remote.artery.OutboundHandshake.{ HandshakeReq, HandshakeRsp }
+import akka.remote.artery.compress.{ CompressionProtocol, CompressionTable }
+import akka.remote.artery.compress.CompressionProtocol._
 import akka.serialization.{ BaseSerializer, Serialization, SerializationExtension, SerializerWithStringManifest }
 
 /** INTERNAL API */
@@ -162,7 +162,7 @@ private[akka] final class ArteryMessageSerializer(val system: ExtendedActorSyste
         .map(keyDeserializer)
         .zip(protoAdv.getValuesList.asScala.asInstanceOf[Iterable[Int]] /* to avoid having to call toInt explicitly */ )
 
-    val table = CompressionTable(protoAdv.getOriginUid, protoAdv.getTableVersion.byteValue, kvs.toMap)
+    val table = CompressionTable[T](protoAdv.getOriginUid, protoAdv.getTableVersion.byteValue, kvs.toMap)
     create(deserializeUniqueAddress(protoAdv.getFrom), table)
   }
 

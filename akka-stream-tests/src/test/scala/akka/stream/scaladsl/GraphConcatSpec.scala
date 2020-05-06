@@ -1,10 +1,10 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.scaladsl
 
-import scala.concurrent.{ Promise }
+import scala.concurrent.Promise
 
 import akka.stream._
 import akka.stream.testkit._
@@ -137,7 +137,7 @@ class GraphConcatSpec extends TwoStreamsSetup {
         .fromGraph(GraphDSL.create() { implicit b =>
           val concat = b.add(Concat[Int]())
           Source(List(1, 2, 3)) ~> concat.in(0)
-          Source.fromFuture(promise.future) ~> concat.in(1)
+          Source.future(promise.future) ~> concat.in(1)
           concat.out ~> Sink.fromSubscriber(subscriber)
           ClosedShape
         })

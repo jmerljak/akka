@@ -1,22 +1,25 @@
 /*
- * Copyright (C) 2015-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2015-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.util
 
-import scala.collection.immutable
 import java.io.IOException
 import java.util.Arrays
 import java.util.jar.Attributes
 import java.util.jar.Manifest
 
+import scala.collection.immutable
+
+import com.github.ghik.silencer.silent
+
 import akka.actor.ActorSystem
+import akka.actor.ClassicActorSystemProvider
 import akka.actor.ExtendedActorSystem
 import akka.actor.Extension
 import akka.actor.ExtensionId
 import akka.actor.ExtensionIdProvider
 import akka.event.Logging
-import com.github.ghik.silencer.silent
 
 /**
  * Akka extension that extracts [[ManifestInfo.Version]] information from META-INF/MANIFEST.MF in jar files
@@ -40,6 +43,7 @@ object ManifestInfo extends ExtensionId[ManifestInfo] with ExtensionIdProvider {
     "com.typesafe.play")
 
   override def get(system: ActorSystem): ManifestInfo = super.get(system)
+  override def get(system: ClassicActorSystemProvider): ManifestInfo = super.get(system)
 
   override def lookup(): ManifestInfo.type = ManifestInfo
 
@@ -105,6 +109,26 @@ object ManifestInfo extends ExtensionId[ManifestInfo] with ExtensionIdProvider {
 
     override def toString: String = version
   }
+
+  /** INTERNAL API */
+  private[util] def checkSameVersion(
+      productName: String,
+      dependencies: immutable.Seq[String],
+      versions: Map[String, Version]): Option[String] = {
+    @silent("deprecated")
+    val filteredVersions = versions.filterKeys(dependencies.toSet)
+    val values = filteredVersions.values.toSet
+    if (values.size > 1) {
+      val highestVersion = values.max
+      val toBeUpdated = filteredVersions.collect { case (k, v) if v != highestVersion => s"$k" }.mkString(", ")
+      Some(
+        s"You are using version $highestVersion of $productName, but it appears " +
+        s"you (perhaps indirectly) also depend on older versions of related artifacts. " +
+        s"You can solve this by adding an explicit dependency on version $highestVersion " +
+        s"of the [$toBeUpdated] artifacts to your project. " +
+        "See also: https://doc.akka.io/docs/akka/current/common/binary-compatibility-rules.html#mixed-versioning-is-not-allowed")
+    } else None
+  }
 }
 
 /**
@@ -161,29 +185,39 @@ final class ManifestInfo(val system: ExtendedActorSystem) extends Extension {
 
   /**
    * Verify that the version is the same for all given artifacts.
+   *
+   * If configuration `akka.fail-mixed-versions=on` it will throw an `IllegalStateException` if the
+   * versions are not the same for all given artifacts.
+   *
+   * @return `true` if versions are the same
    */
   def checkSameVersion(productName: String, dependencies: immutable.Seq[String], logWarning: Boolean): Boolean = {
-    @silent("deprecated")
-    val filteredVersions = versions.filterKeys(dependencies.toSet)
-    val values = filteredVersions.values.toSet
-    if (values.size > 1) {
-      if (logWarning) {
-        val conflictingVersions = values.mkString(", ")
-        val fullInfo = filteredVersions.map { case (k, v) => s"$k:$v" }.mkString(", ")
-        val highestVersion = values.max
-        Logging(system, getClass).warning(
-          "Detected possible incompatible versions on the classpath. " +
-          s"Please note that a given $productName version MUST be the same across all modules of $productName " +
-          "that you are using, e.g. if you use [{}] all other modules that are released together MUST be of the " +
-          "same version. Make sure you're using a compatible set of libraries. " +
-          "Possibly conflicting versions [{}] in libraries [{}]",
-          highestVersion,
-          conflictingVersions,
-          fullInfo)
-      }
-      false
-    } else
-      true
+    checkSameVersion(productName, dependencies, logWarning, throwException = system.settings.FailMixedVersions)
   }
 
+  /**
+   * Verify that the version is the same for all given artifacts.
+   *
+   * If `throwException` is `true` it will throw an `IllegalStateException` if the versions are not the same
+   * for all given artifacts.
+   *
+   * @return `true` if versions are the same
+   */
+  def checkSameVersion(
+      productName: String,
+      dependencies: immutable.Seq[String],
+      logWarning: Boolean,
+      throwException: Boolean): Boolean = {
+    ManifestInfo.checkSameVersion(productName, dependencies, versions) match {
+      case Some(message) =>
+        if (logWarning)
+          Logging(system, getClass).warning(message)
+
+        if (throwException)
+          throw new IllegalStateException(message)
+        else
+          false
+      case None => true
+    }
+  }
 }

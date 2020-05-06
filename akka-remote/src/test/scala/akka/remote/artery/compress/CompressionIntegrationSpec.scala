@@ -1,19 +1,20 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote.artery.compress
 
+import scala.concurrent.duration._
+
 import com.typesafe.config.ConfigFactory
-import akka.actor._
-import akka.remote.artery.compress.CompressionProtocol.Events
-import akka.testkit._
 import com.typesafe.config.ConfigFactory
 
-import scala.concurrent.duration._
+import akka.actor._
 import akka.actor.ExtendedActorSystem
-import akka.serialization.SerializerWithStringManifest
 import akka.remote.artery.ArteryMultiNodeSpec
+import akka.remote.artery.compress.CompressionProtocol.Events
+import akka.serialization.SerializerWithStringManifest
+import akka.testkit._
 
 object CompressionIntegrationSpec {
 
@@ -22,7 +23,6 @@ object CompressionIntegrationSpec {
        loglevel = INFO
 
        actor {
-         serialize-messages = off
          serializers {
            test-message = "akka.remote.artery.compress.TestMessageSerializer"
          }

@@ -1,15 +1,18 @@
 /*
- * Copyright (C) 2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2019-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.coordination.lease.javadsl
 
 import akka.actor.{ ActorSystem, ExtendedActorSystem, Extension, ExtensionId, ExtensionIdProvider }
+import akka.actor.ClassicActorSystemProvider
 import akka.coordination.lease.internal.LeaseAdapter
+import akka.coordination.lease.internal.LeaseAdapterToScala
 import akka.coordination.lease.scaladsl.{ LeaseProvider => ScalaLeaseProvider }
 
 object LeaseProvider extends ExtensionId[LeaseProvider] with ExtensionIdProvider {
   override def get(system: ActorSystem): LeaseProvider = super.get(system)
+  override def get(system: ClassicActorSystemProvider): LeaseProvider = super.get(system)
 
   override def lookup = LeaseProvider
 
@@ -33,6 +36,10 @@ class LeaseProvider(system: ExtendedActorSystem) extends Extension {
    */
   def getLease(leaseName: String, configPath: String, ownerName: String): Lease = {
     val scalaLease = delegate.getLease(leaseName, configPath, ownerName)
-    new LeaseAdapter(scalaLease)(system.dispatchers.internalDispatcher)
+    // unwrap if this is a java implementation
+    scalaLease match {
+      case adapter: LeaseAdapterToScala => adapter.delegate
+      case _                            => new LeaseAdapter(scalaLease)(system.dispatchers.internalDispatcher)
+    }
   }
 }

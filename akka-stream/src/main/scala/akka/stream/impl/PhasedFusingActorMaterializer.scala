@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2015-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.impl
@@ -7,13 +7,22 @@ package akka.stream.impl
 import java.util
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.collection.immutable.Map
+import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.duration.FiniteDuration
+
+import com.github.ghik.silencer.silent
+import org.reactivestreams.Processor
+import org.reactivestreams.Publisher
+import org.reactivestreams.Subscriber
+
 import akka.NotUsed
 import akka.actor.ActorContext
 import akka.actor.ActorRef
-import akka.actor.ActorRefFactory
 import akka.actor.ActorSystem
 import akka.actor.Cancellable
-import akka.actor.ExtendedActorSystem
+import akka.actor.Deploy
 import akka.actor.PoisonPill
 import akka.actor.Props
 import akka.annotation.DoNotInherit
@@ -22,29 +31,21 @@ import akka.annotation.InternalStableApi
 import akka.dispatch.Dispatchers
 import akka.event.Logging
 import akka.event.LoggingAdapter
-import akka.stream.Attributes.InputBuffer
 import akka.stream._
+import akka.stream.Attributes.InputBuffer
+import akka.stream.impl.Stages.DefaultAttributes
 import akka.stream.impl.StreamLayout.AtomicModule
+import akka.stream.impl.fusing._
 import akka.stream.impl.fusing.ActorGraphInterpreter.ActorOutputBoundary
 import akka.stream.impl.fusing.ActorGraphInterpreter.BatchingActorInputBoundary
 import akka.stream.impl.fusing.GraphInterpreter.Connection
-import akka.stream.impl.fusing._
 import akka.stream.impl.io.TLSActor
 import akka.stream.impl.io.TlsModule
 import akka.stream.stage.GraphStageLogic
 import akka.stream.stage.InHandler
 import akka.stream.stage.OutHandler
 import akka.util.OptionVal
-import org.reactivestreams.Processor
-import org.reactivestreams.Publisher
-import org.reactivestreams.Subscriber
-
-import scala.collection.immutable.Map
-import scala.concurrent.ExecutionContextExecutor
-import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.ExecutionContextExecutor
 import akka.util.OptionVal
-import com.github.ghik.silencer.silent
 
 /**
  * INTERNAL API
@@ -98,38 +99,29 @@ import com.github.ghik.silencer.silent
     },
     GraphStageTag -> DefaultPhase)
 
-  @silent("deprecated")
-  @InternalApi private[akka] def apply()(implicit context: ActorRefFactory): Materializer = {
+  def apply(
+      context: ActorContext,
+      namePrefix: String,
+      settings: ActorMaterializerSettings,
+      attributes: Attributes): PhasedFusingActorMaterializer = {
     val haveShutDown = new AtomicBoolean(false)
-    val system = actorSystemOf(context)
-    val materializerSettings = ActorMaterializerSettings(system)
-    val defaultAttributes = materializerSettings.toAttributes
 
-    val streamSupervisor =
-      context.actorOf(StreamSupervisor.props(defaultAttributes, haveShutDown), StreamSupervisor.nextName())
+    val dispatcher = attributes.mandatoryAttribute[ActorAttributes.Dispatcher].dispatcher
+    val supervisorProps =
+      StreamSupervisor.props(attributes, haveShutDown).withDispatcher(dispatcher).withDeploy(Deploy.local)
 
-    PhasedFusingActorMaterializer(
-      system,
-      materializerSettings,
-      defaultAttributes,
-      system.dispatchers,
+    // FIXME why do we need a global unique name for the child?
+    val streamSupervisor = context.actorOf(supervisorProps, StreamSupervisor.nextName())
+
+    new PhasedFusingActorMaterializer(
+      context.system,
+      settings,
+      attributes,
+      context.system.dispatchers,
       streamSupervisor,
       haveShutDown,
-      FlowNames(system).name.copy("flow"))
+      FlowNames(context.system).name.copy(namePrefix))
   }
-
-  private def actorSystemOf(context: ActorRefFactory): ActorSystem = {
-    val system = context match {
-      case s: ExtendedActorSystem => s
-      case c: ActorContext        => c.system
-      case null                   => throw new IllegalArgumentException("ActorRefFactory context must be defined")
-      case _ =>
-        throw new IllegalArgumentException(
-          s"ActorRefFactory context must be an ActorSystem or ActorContext, got [${context.getClass.getName}]")
-    }
-    system
-  }
-
 }
 
 private final case class SegmentInfo(
@@ -625,10 +617,6 @@ private final case class SavedIslandData(
     val effectiveProps = props.dispatcher match {
       case Dispatchers.DefaultDispatcherId =>
         props.withDispatcher(context.effectiveAttributes.mandatoryAttribute[ActorAttributes.Dispatcher].dispatcher)
-      case ActorAttributes.IODispatcher.dispatcher =>
-        // this one is actually not a dispatcher but a relative config key pointing containing the actual dispatcher name
-        // FIXME go via attributes here,or something
-        props.withDispatcher(settings.blockingIoDispatcher)
       case _ => props
     }
 
@@ -765,6 +753,7 @@ private final case class SavedIslandData(
     val boundary = new ActorOutputBoundary(shell, out.toString)
     logics.add(boundary)
     boundary.stageId = logics.size() - 1
+    boundary.attributes = logic.attributes.and(DefaultAttributes.outputBoundary)
 
     val connection = outConn()
     boundary.portToConn(boundary.in.id) = connection
@@ -788,6 +777,7 @@ private final case class SavedIslandData(
       new BatchingActorInputBoundary(bufferSize, shell, publisher, connection.inOwner.toString)
     logics.add(boundary)
     boundary.stageId = logics.size() - 1
+    boundary.attributes = connection.inOwner.attributes.and(DefaultAttributes.inputBoundary)
 
     boundary.portToConn(boundary.out.id + boundary.inCount) = connection
     connection.outHandler = boundary.handlers(0).asInstanceOf[OutHandler]

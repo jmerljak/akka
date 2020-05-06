@@ -1,16 +1,17 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster.sharding
+
+import com.typesafe.config.ConfigFactory
+import org.scalatest.wordspec.AnyWordSpecLike
 
 import akka.actor.{ Actor, PoisonPill, Props }
 import akka.cluster.sharding.PersistentShardSpec.EntityActor
 import akka.cluster.sharding.Shard.{ GetShardStats, ShardStats }
 import akka.cluster.sharding.ShardRegion.{ StartEntity, StartEntityAck }
 import akka.testkit.{ AkkaSpec, ImplicitSender }
-import com.typesafe.config.ConfigFactory
-import org.scalatest.WordSpecLike
 
 object PersistentShardSpec {
   class EntityActor extends Actor {
@@ -24,7 +25,7 @@ object PersistentShardSpec {
     """.stripMargin)
 }
 
-class PersistentShardSpec extends AkkaSpec(PersistentShardSpec.config) with WordSpecLike with ImplicitSender {
+class PersistentShardSpec extends AkkaSpec(PersistentShardSpec.config) with AnyWordSpecLike with ImplicitSender {
 
   "Persistent Shard" must {
 

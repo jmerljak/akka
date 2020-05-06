@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.persistence.typed.javadsl;
@@ -17,7 +17,7 @@ import com.typesafe.config.ConfigFactory;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
-import org.scalatest.junit.JUnitSuite;
+import org.scalatestplus.junit.JUnitSuite;
 
 public class NullEmptyStateTest extends JUnitSuite {
 
@@ -45,7 +45,7 @@ public class NullEmptyStateTest extends JUnitSuite {
     }
 
     @Override
-    public SignalHandler signalHandler() {
+    public SignalHandler<String> signalHandler() {
       return newSignalHandlerBuilder()
           .onSignal(
               RecoveryCompleted.instance(),
@@ -85,7 +85,7 @@ public class NullEmptyStateTest extends JUnitSuite {
   public void handleNullState() throws Exception {
     TestProbe<String> probe = testKit.createTestProbe();
     Behavior<String> b =
-        Behaviors.setup(ctx -> new NullEmptyState(new PersistenceId("a"), probe.ref()));
+        Behaviors.setup(ctx -> new NullEmptyState(PersistenceId.ofUniqueId("a"), probe.ref()));
 
     ActorRef<String> ref1 = testKit.spawn(b);
     probe.expectMessage("onRecoveryCompleted:null");

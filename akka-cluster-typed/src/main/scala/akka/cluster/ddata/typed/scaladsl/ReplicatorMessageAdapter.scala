@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2019-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster.ddata.typed.scaladsl
@@ -61,20 +61,21 @@ class ReplicatorMessageAdapter[A, B <: ReplicatedData](
 
   private implicit val askTimeout: Timeout = Timeout(unexpectedAskTimeout)
 
-  private var changedMessageAdapters: Map[Key[B], ActorRef[Replicator.Changed[B]]] = Map.empty
+  private var changedMessageAdapters: Map[Key[B], ActorRef[Replicator.SubscribeResponse[B]]] = Map.empty
 
   /**
-   * Subscribe to changes of the given `key`. The [[Replicator.Changed]] messages from
+   * Subscribe to changes of the given `key`. The [[Replicator.Changed]] and [[Replicator.Deleted]] messages from
    * the replicator are transformed to the message protocol of the requesting actor with
    * the given `responseAdapter` function.
    */
-  def subscribe(key: Key[B], responseAdapter: Replicator.Changed[B] => A): Unit = {
+  def subscribe(key: Key[B], responseAdapter: Replicator.SubscribeResponse[B] => A): Unit = {
     // unsubscribe in case it's called more than once per key
     unsubscribe(key)
     changedMessageAdapters.get(key).foreach { subscriber =>
       replicator ! Replicator.Unsubscribe(key, subscriber)
     }
-    val replyTo: ActorRef[Replicator.Changed[B]] = context.messageAdapter[Replicator.Changed[B]](responseAdapter)
+    val replyTo: ActorRef[Replicator.SubscribeResponse[B]] =
+      context.messageAdapter[Replicator.SubscribeResponse[B]](responseAdapter)
     changedMessageAdapters = changedMessageAdapters.updated(key, replyTo)
     replicator ! Replicator.Subscribe(key, replyTo)
   }

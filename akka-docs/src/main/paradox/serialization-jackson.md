@@ -1,3 +1,6 @@
+---
+project.description: Serialization with Jackson for Akka.
+---
 # Serialization with Jackson
 
 ## Dependency
@@ -119,7 +122,7 @@ The `ParameterNamesModule` is configured with `JsonCreator.Mode.PROPERTIES` as d
 
 @@@
 
-## Polymorphic types
+### Polymorphic types
 
 A polymorphic type is when a certain base type has multiple alternative implementations. When nested fields or
 collections are of polymorphic type the concrete implementations of the type must be listed with `@JsonTypeInfo`
@@ -170,7 +173,17 @@ This can be solved by implementing a custom serialization for the enums. Annotat
 Scala
 :  @@snip [CustomAdtSerializer.scala](/akka-serialization-jackson/src/test/scala/doc/akka/serialization/jackson/CustomAdtSerializer.scala) { #adt-trait-object }
 
+### Enumerations
 
+Jackson support for Scala Enumerations defaults to serializing a `Value` as a `JsonObject` that includes a 
+field with the `"value"` and a field with the `"type"` whose value is the FQCN of the enumeration. Jackson
+includes the [`@JsonScalaEnumeration`](https://github.com/FasterXML/jackson-module-scala/wiki/Enumerations) to 
+statically specify the type information to a field. When using the `@JsonScalaEnumeration` annotation the enumeration 
+value is serialized as a JsonString.
+
+Scala
+:  @@snip [JacksonSerializerSpec.scala](/akka-serialization-jackson/src/test/scala/akka/serialization/jackson/JacksonSerializerSpec.scala) { #jackson-scala-enumeration }
+    
 @@@
 
 
@@ -359,13 +372,19 @@ Java compiler option is enabled.
 
 ### Compression
 
-JSON can be rather verbose and for large messages it can be beneficial compress large payloads. Messages larger
-than the following configuration are compressed with GZIP.
+JSON can be rather verbose and for large messages it can be beneficial to compress large payloads. For
+the `jackson-json` binding the default configuration is:
 
 @@snip [reference.conf](/akka-serialization-jackson/src/main/resources/reference.conf) { #compression }
 
-Compression can be disabled by setting this configuration property to `off`. It will still be able to decompress
+Messages larger than the `compress-larger-than` property are compressed with GZIP.
+
+Compression can be disabled by setting the `algorithm` property to `off`. It will still be able to decompress
 payloads that were compressed when serialized, e.g. if this configuration is changed.
+
+For the `jackson-cbor` and custom bindings other than `jackson-json` compression is by default disabled,
+but can be enabled in the same way as the configuration shown above but replacing `jackson-json` with
+the binding name (for example `jackson-cbor`).
 
 ## Additional configuration
 
@@ -382,6 +401,35 @@ different settings for remote messages and persisted events.
 
 @@snip [config](/akka-serialization-jackson/src/test/scala/doc/akka/serialization/jackson/SerializationDocSpec.scala) { #several-config }
 
+### Manifest-less serialization
+
+When using the Jackson serializer for persistence, given that the fully qualified class name is
+stored in the manifest, this can result in a lot of wasted disk and IO used, especially when the
+events are small. To address this, a `type-in-manifest` flag can be turned off, which will result
+in the class name not appearing in the manifest.
+
+When deserializing, the Jackson serializer will use the type defined in `deserialization-type`, if
+present, otherwise it will look for exactly one serialization binding class, and use that. For
+this to be useful, generally that single type must be a 
+@ref:[Polymorphic type](#polymorphic-types), with all type information necessary to deserialize to
+the various sub types contained in the JSON message.
+
+When switching serializers, for example, if doing a rolling update as described
+@ref:[here](additional/rolling-updates.md#from-java-serialization-to-jackson), there will be
+periods of time when you may have no serialization bindings declared for the type. In such
+circumstances, you must use the `deserialization-type` configuration attribute to specify which
+type should be used to deserialize messages.
+
+Since this configuration can only be applied to a single root type, you will usually only want to
+apply it to a per binding configuration, not to the regular `jackson-json` or `jackson-cbor`
+configurations.
+
+@@snip [config](/akka-serialization-jackson/src/test/scala/doc/akka/serialization/jackson/SerializationDocSpec.scala) { #manifestless }
+
+Note that Akka remoting already implements manifest compression, and so this optimization will have
+no significant impact for messages sent over remoting. It's only useful for messages serialized for
+other purposes, such as persistence or distributed data.
+
 ## Additional features
 
 Additional Jackson serialization features can be enabled/disabled in configuration. The default values from
@@ -391,7 +439,7 @@ Jackson are used aside from the the following that are changed in Akka's default
 
 ### Date/time format
 
-`WRITE_DATES_AS_TIMESTAMPS` is by default disabled, which means that date/time fields are serialized in
+`WRITE_DATES_AS_TIMESTAMPS` and `WRITE_DURATIONS_AS_TIMESTAMPS` are by default disabled, which means that date/time fields are serialized in
 ISO-8601 (rfc3339) `yyyy-MM-dd'T'HH:mm:ss.SSSZ` format instead of numeric arrays. This is better for
 interoperability but it is slower. If you don't need the ISO format for interoperability with external systems
 you can change the following configuration for better performance of date/time fields.

@@ -1,16 +1,16 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed
 package internal
 package adapter
 
-import akka.annotation.InternalApi
-
-import akka.{ actor => classic }
 import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
+
+import akka.{ actor => classic }
+import akka.annotation.InternalApi
 
 @InternalApi
 private[akka] object ActorContextAdapter {

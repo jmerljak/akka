@@ -1,29 +1,27 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.serialization
 
-import language.postfixOps
-
-import akka.testkit.{ AkkaSpec, EventFilter }
-import akka.actor._
 import java.io._
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 import scala.concurrent.Await
-
-import akka.util.{ unused, Timeout }
 import scala.concurrent.duration._
 
-import com.typesafe.config._
-import akka.pattern.ask
-import java.nio.ByteOrder
-import java.nio.ByteBuffer
-
-import akka.actor.dungeon.SerializationCheckFailedException
-import com.github.ghik.silencer.silent
-import test.akka.serialization.NoVerification
 import SerializationTests._
+import com.github.ghik.silencer.silent
+import com.typesafe.config._
+import language.postfixOps
+import test.akka.serialization.NoVerification
+
+import akka.actor._
+import akka.actor.dungeon.SerializationCheckFailedException
+import akka.pattern.ask
+import akka.testkit.{ AkkaSpec, EventFilter }
+import akka.util.{ unused, Timeout }
 import akka.util.ByteString
 
 object SerializationTests {
@@ -31,7 +29,6 @@ object SerializationTests {
   val serializeConf = s"""
     akka {
       actor {
-        serialize-messages = off
         serializers {
           test = "akka.serialization.NoopSerializer"
           test2 = "akka.serialization.NoopSerializer2"
@@ -105,7 +102,7 @@ object SerializationTests {
 
   class FooActor extends Actor {
     def receive = {
-      case s: String => sender() ! s
+      case msg => sender() ! msg
     }
   }
 
@@ -114,7 +111,7 @@ object SerializationTests {
       receiveBuilder().build()
   }
 
-  class NonSerializableActor(@unused system: ActorSystem) extends Actor {
+  class NonSerializableActor(@unused arg: AnyRef) extends Actor {
     def receive = {
       case s: String => sender() ! s
     }
@@ -277,7 +274,7 @@ class SerializeSpec extends AkkaSpec(SerializationTests.serializeConf) {
 }
 
 class VerifySerializabilitySpec extends AkkaSpec(SerializationTests.verifySerializabilityConf) {
-  implicit val timeout = Timeout(5 seconds)
+  implicit val timeout: Timeout = Timeout(5 seconds)
 
   "verify config" in {
     system.settings.SerializeAllCreators should ===(true)
@@ -285,26 +282,48 @@ class VerifySerializabilitySpec extends AkkaSpec(SerializationTests.verifySerial
   }
 
   "verify creators" in {
-    val a = system.actorOf(Props[FooActor])
+    val a = system.actorOf(Props[FooActor]())
     system.stop(a)
 
     val b = system.actorOf(Props(new FooAbstractActor))
     system.stop(b)
 
     intercept[IllegalArgumentException] {
-      system.actorOf(Props(new NonSerializableActor(system)))
+      system.actorOf(Props(classOf[NonSerializableActor], new AnyRef))
     }
 
   }
 
+  "not verify akka creators" in {
+    EventFilter.warning(start = "ok", occurrences = 1).intercept {
+      // ActorSystem is not possible to serialize, but ok since it starts with "akka."
+      val a = system.actorOf(Props(classOf[NonSerializableActor], system))
+      // to verify that nothing is logged
+      system.log.warning("ok")
+      system.stop(a)
+    }
+  }
+
   "verify messages" in {
-    val a = system.actorOf(Props[FooActor])
+    val a = system.actorOf(Props[FooActor]())
     Await.result(a ? "pigdog", timeout.duration) should ===("pigdog")
 
     EventFilter[SerializationCheckFailedException](
       start = "Failed to serialize and deserialize message of type java.lang.Object",
       occurrences = 1).intercept {
       a ! new AnyRef
+    }
+    system.stop(a)
+  }
+
+  "not verify akka messages" in {
+    val a = system.actorOf(Props[FooActor]())
+    EventFilter.warning(start = "ok", occurrences = 1).intercept {
+      // ActorSystem is not possible to serialize, but ok since it starts with "akka."
+      val message = system
+      Await.result(a ? message, timeout.duration) should ===(message)
+      // to verify that nothing is logged
+      system.log.warning("ok")
     }
     system.stop(a)
   }
@@ -511,6 +530,30 @@ class NoVerificationWarningOffSpec
   }
 }
 
+class SerializerDeadlockSpec extends AkkaSpec {
+
+  "SerializationExtension" must {
+
+    "not be accessed from constructor of serializer" in {
+      intercept[IllegalStateException] {
+        val sys = ActorSystem(
+          "SerializerDeadlockSpec",
+          ConfigFactory.parseString("""
+          akka {
+            actor {
+              creation-timeout = 1s
+              serializers {
+                test = "akka.serialization.DeadlockSerializer"
+              }
+            }
+          }
+          """))
+        shutdown(sys)
+      }.getMessage should include("SerializationExtension from its constructor")
+    }
+  }
+}
+
 protected[akka] class NoopSerializer extends Serializer {
   def includeManifest: Boolean = false
 
@@ -538,4 +581,18 @@ protected[akka] class NoopSerializer2 extends Serializer {
 @SerialVersionUID(1)
 protected[akka] final case class FakeThrowable(msg: String) extends Throwable(msg) with Serializable {
   override def fillInStackTrace = null
+}
+
+class DeadlockSerializer(system: ExtendedActorSystem) extends Serializer {
+
+  // not allowed
+  SerializationExtension(system)
+
+  def includeManifest: Boolean = false
+
+  def identifier = 9999
+
+  def toBinary(o: AnyRef): Array[Byte] = Array.empty[Byte]
+
+  def fromBinary(bytes: Array[Byte], clazz: Option[Class[_]]): AnyRef = null
 }

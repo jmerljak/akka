@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package jdocs.akka.typed;
@@ -7,6 +7,7 @@ package jdocs.akka.typed;
 // #oo-style
 // #fun-style
 import akka.actor.typed.Behavior;
+import akka.actor.typed.SupervisorStrategy;
 import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
 // #fun-style
@@ -110,12 +111,10 @@ interface StyleGuideDocExamples {
         return Behaviors.setup(Counter::new);
       }
 
-      private final ActorContext<Counter.Command> context;
-
       private int n;
 
       private Counter(ActorContext<Command> context) {
-        this.context = context;
+        super(context);
       }
 
       @Override
@@ -130,7 +129,7 @@ interface StyleGuideDocExamples {
 
       private Behavior<Command> onIncrement() {
         n++;
-        context.getLog().debug("Incremented counter to [{}]", n);
+        getContext().getLog().debug("Incremented counter to [{}]", n);
         return this;
       }
 
@@ -213,7 +212,7 @@ interface StyleGuideDocExamples {
                 name,
                 command.interval,
                 n);
-        timers.startTimerWithFixedDelay("repeat", Increment.INSTANCE, command.interval);
+        timers.startTimerWithFixedDelay(Increment.INSTANCE, command.interval);
         return Behaviors.same();
       }
 
@@ -308,7 +307,7 @@ interface StyleGuideDocExamples {
                 setup.name,
                 command.interval,
                 n);
-        setup.timers.startTimerWithFixedDelay("repeat", Increment.INSTANCE, command.interval);
+        setup.timers.startTimerWithFixedDelay(Increment.INSTANCE, command.interval);
         return Behaviors.same();
       }
 
@@ -396,7 +395,7 @@ interface StyleGuideDocExamples {
                 name,
                 command.interval,
                 n);
-        timers.startTimerWithFixedDelay("repeat", Increment.INSTANCE, command.interval);
+        timers.startTimerWithFixedDelay(Increment.INSTANCE, command.interval);
         return Behaviors.same();
       }
 
@@ -426,13 +425,15 @@ interface StyleGuideDocExamples {
 
       // factory for the initial `Behavior`
       public static Behavior<Command> create(int countDownFrom, ActorRef<Done> notifyWhenZero) {
-        return Behaviors.setup(context -> new CountDown(countDownFrom, notifyWhenZero));
+        return Behaviors.setup(context -> new CountDown(context, countDownFrom, notifyWhenZero));
       }
 
       private final ActorRef<Done> notifyWhenZero;
       private int remaining;
 
-      private CountDown(int countDownFrom, ActorRef<Done> notifyWhenZero) {
+      private CountDown(
+          ActorContext<Command> context, int countDownFrom, ActorRef<Done> notifyWhenZero) {
+        super(context);
         this.remaining = countDownFrom;
         this.notifyWhenZero = notifyWhenZero;
       }
@@ -552,18 +553,17 @@ interface StyleGuideDocExamples {
             context ->
                 Behaviors.withTimers(
                     timers -> {
-                      timers.startTimerWithFixedDelay("tick", Tick.INSTANCE, tickInterval);
+                      timers.startTimerWithFixedDelay(Tick.INSTANCE, tickInterval);
                       return new Counter(name, context);
                     }));
       }
 
       private final String name;
-      private final ActorContext<Command> context;
       private int count;
 
       private Counter(String name, ActorContext<Command> context) {
+        super(context);
         this.name = name;
-        this.context = context;
       }
 
       // #on-message-lambda
@@ -589,14 +589,16 @@ interface StyleGuideDocExamples {
       // #on-message-lambda
       private Behavior<Command> onIncrement() {
         count++;
-        context.getLog().debug("[{}] Incremented counter to [{}]", name, count);
+        getContext().getLog().debug("[{}] Incremented counter to [{}]", name, count);
         return this;
       }
       // #on-message-lambda
 
       private Behavior<Command> onTick() {
         count++;
-        context.getLog().debug("[{}] Incremented counter by background tick to [{}]", name, count);
+        getContext()
+            .getLog()
+            .debug("[{}] Incremented counter by background tick to [{}]", name, count);
         return this;
       }
 
@@ -616,14 +618,14 @@ interface StyleGuideDocExamples {
                 Increment.class,
                 notUsed -> {
                   count++;
-                  context.getLog().debug("[{}] Incremented counter to [{}]", name, count);
+                  getContext().getLog().debug("[{}] Incremented counter to [{}]", name, count);
                   return this;
                 })
             .onMessage(
                 Tick.class,
                 notUsed -> {
                   count++;
-                  context
+                  getContext()
                       .getLog()
                       .debug("[{}] Incremented counter by background tick to [{}]", name, count);
                   return this;
@@ -687,19 +689,18 @@ interface StyleGuideDocExamples {
                 (ActorContext<Message> context) ->
                     Behaviors.withTimers(
                         timers -> {
-                          timers.startTimerWithFixedDelay("tick", Tick.INSTANCE, tickInterval);
+                          timers.startTimerWithFixedDelay(Tick.INSTANCE, tickInterval);
                           return new Counter(name, context);
                         }))
             .narrow(); // note narrow here
       }
 
       private final String name;
-      private final ActorContext<Message> context;
       private int count;
 
       private Counter(String name, ActorContext<Message> context) {
+        super(context);
         this.name = name;
-        this.context = context;
       }
 
       @Override
@@ -713,13 +714,15 @@ interface StyleGuideDocExamples {
 
       private Behavior<Message> onIncrement() {
         count++;
-        context.getLog().debug("[{}] Incremented counter to [{}]", name, count);
+        getContext().getLog().debug("[{}] Incremented counter to [{}]", name, count);
         return this;
       }
 
       private Behavior<Message> onTick() {
         count++;
-        context.getLog().debug("[{}] Incremented counter by background tick to [{}]", name, count);
+        getContext()
+            .getLog()
+            .debug("[{}] Incremented counter by background tick to [{}]", name, count);
         return this;
       }
 
@@ -729,5 +732,56 @@ interface StyleGuideDocExamples {
       }
     }
     // #public-private-messages-2
+  }
+
+  interface NestingSample1 {
+    interface Command {}
+
+    // #nesting
+    public static Behavior<Command> apply() {
+      return Behaviors.setup(
+          context ->
+              Behaviors.withStash(
+                  100,
+                  stash ->
+                      Behaviors.withTimers(
+                          timers -> {
+                            context.getLog().debug("Starting up");
+
+                            // behavior using context, stash and timers ...
+                            // #nesting
+                            return Behaviors.empty();
+                            // #nesting
+                          })));
+    }
+    // #nesting
+  }
+
+  interface NestingSample2 {
+    interface Command {}
+
+    // #nesting-supervise
+    public static Behavior<Command> create() {
+      return Behaviors.setup(
+          context -> {
+            // only run on initial actor start, not on crash-restart
+            context.getLog().info("Starting");
+
+            return Behaviors.<Command>supervise(
+                    Behaviors.withStash(
+                        100,
+                        stash -> {
+                          // every time the actor crashes and restarts a new stash is created
+                          // (previous stash is lost)
+                          context.getLog().debug("Starting up with stash");
+                          // Behaviors.receiveMessage { ... }
+                          // #nesting-supervise
+                          return Behaviors.empty();
+                          // #nesting-supervise
+                        }))
+                .onFailure(RuntimeException.class, SupervisorStrategy.restart());
+          });
+    }
+    // #nesting-supervise
   }
 }

@@ -1,8 +1,13 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster
+
+import scala.collection.immutable
+import scala.concurrent.duration._
+
+import com.typesafe.config.ConfigFactory
 
 import akka.actor._
 import akka.event.Logging.Info
@@ -10,10 +15,6 @@ import akka.remote.RARP
 import akka.remote.testkit.{ MultiNodeConfig, MultiNodeSpec }
 import akka.testkit._
 import akka.testkit.TestKit
-import com.typesafe.config.ConfigFactory
-
-import scala.collection.immutable
-import scala.concurrent.duration._
 
 object NodeChurnMultiJvmSpec extends MultiNodeConfig {
   val first = role("first")
@@ -21,8 +22,10 @@ object NodeChurnMultiJvmSpec extends MultiNodeConfig {
   val third = role("third")
 
   commonConfig(
-    debugConfig(on = false).withFallback(ConfigFactory.parseString("""
-      akka.cluster.auto-down-unreachable-after = 1s
+    debugConfig(on = false)
+      .withFallback(ConfigFactory.parseString("""
+      akka.cluster.downing-provider-class = akka.cluster.testkit.AutoDowning
+      akka.cluster.testkit.auto-down-unreachable-after = 1s
       akka.cluster.prune-gossip-tombstones-after = 1s
       akka.remote.classic.log-frame-size-exceeding = 1200b
       akka.remote.artery.advanced.aeron {
@@ -30,7 +33,8 @@ object NodeChurnMultiJvmSpec extends MultiNodeConfig {
         embedded-media-driver = off
         aeron-dir = "target/aeron-NodeChurnSpec"
       }
-      """)).withFallback(MultiNodeClusterSpec.clusterConfig))
+      """))
+      .withFallback(MultiNodeClusterSpec.clusterConfig))
 
   class LogListener(testActor: ActorRef) extends Actor {
     def receive = {

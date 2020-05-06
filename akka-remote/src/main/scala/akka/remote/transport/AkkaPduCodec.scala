@@ -1,18 +1,19 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote.transport
 
+import com.github.ghik.silencer.silent
+
 import akka.AkkaException
 import akka.actor.{ ActorRef, Address, AddressFromURIString, InternalActorRef }
-import akka.remote.WireFormats._
-import akka.remote._
-import akka.util.ByteString
-import akka.protobufv3.internal.InvalidProtocolBufferException
 import akka.protobufv3.internal.{ ByteString => PByteString }
+import akka.protobufv3.internal.InvalidProtocolBufferException
+import akka.remote._
+import akka.remote.WireFormats._
+import akka.util.ByteString
 import akka.util.OptionVal
-import com.github.ghik.silencer.silent
 
 /**
  * INTERNAL API
@@ -173,7 +174,6 @@ private[remote] object AkkaPduProtobufCodec extends AkkaPduCodec {
 
   override def constructAssociate(info: HandshakeInfo): ByteString = {
     val handshakeInfo = AkkaHandshakeInfo.newBuilder.setOrigin(serializeAddress(info.origin)).setUid(info.uid.toLong)
-    info.cookie.foreach(handshakeInfo.setCookie)
     constructControlMessagePdu(WireFormats.CommandType.ASSOCIATE, Some(handshakeInfo))
   }
 
@@ -240,12 +240,11 @@ private[remote] object AkkaPduProtobufCodec extends AkkaPduCodec {
     controlPdu.getCommandType match {
       case CommandType.ASSOCIATE if controlPdu.hasHandshakeInfo =>
         val handshakeInfo = controlPdu.getHandshakeInfo
-        val cookie = if (handshakeInfo.hasCookie) Some(handshakeInfo.getCookie) else None
         Associate(
           HandshakeInfo(
             decodeAddress(handshakeInfo.getOrigin),
-            handshakeInfo.getUid.toInt, // 64 bits are allocated in the wire formats, but we use only 32 for now
-            cookie))
+            handshakeInfo.getUid.toInt // 64 bits are allocated in the wire formats, but we use only 32 for now
+          ))
       case CommandType.DISASSOCIATE               => Disassociate(AssociationHandle.Unknown)
       case CommandType.DISASSOCIATE_SHUTTING_DOWN => Disassociate(AssociationHandle.Shutdown)
       case CommandType.DISASSOCIATE_QUARANTINED   => Disassociate(AssociationHandle.Quarantined)

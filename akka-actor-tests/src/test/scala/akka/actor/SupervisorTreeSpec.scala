@@ -1,20 +1,18 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor
 
-import language.postfixOps
-
 import scala.concurrent.Await
 import scala.concurrent.duration._
-import akka.testkit.{ AkkaSpec, DefaultTimeout, EventFilter, ImplicitSender }
-import akka.pattern.ask
 
-class SupervisorTreeSpec
-    extends AkkaSpec("akka.actor.serialize-messages = off")
-    with ImplicitSender
-    with DefaultTimeout {
+import language.postfixOps
+
+import akka.pattern.ask
+import akka.testkit.{ AkkaSpec, DefaultTimeout, EventFilter, ImplicitSender }
+
+class SupervisorTreeSpec extends AkkaSpec with ImplicitSender with DefaultTimeout {
 
   "In a 3 levels deep supervisor tree (linked in the constructor) we" must {
 

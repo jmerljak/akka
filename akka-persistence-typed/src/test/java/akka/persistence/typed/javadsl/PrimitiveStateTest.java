@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.persistence.typed.javadsl;
@@ -17,7 +17,7 @@ import com.typesafe.config.ConfigFactory;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
-import org.scalatest.junit.JUnitSuite;
+import org.scalatestplus.junit.JUnitSuite;
 
 public class PrimitiveStateTest extends JUnitSuite {
 
@@ -45,7 +45,7 @@ public class PrimitiveStateTest extends JUnitSuite {
     }
 
     @Override
-    public SignalHandler signalHandler() {
+    public SignalHandler<Integer> signalHandler() {
       return newSignalHandlerBuilder()
           .onSignal(
               RecoveryCompleted.instance(),
@@ -76,7 +76,7 @@ public class PrimitiveStateTest extends JUnitSuite {
   public void handleIntegerState() throws Exception {
     TestProbe<String> probe = testKit.createTestProbe();
     Behavior<Integer> b =
-        Behaviors.setup(ctx -> new PrimitiveState(new PersistenceId("a"), probe.ref()));
+        Behaviors.setup(ctx -> new PrimitiveState(PersistenceId.ofUniqueId("a"), probe.ref()));
     ActorRef<Integer> ref1 = testKit.spawn(b);
     probe.expectMessage("onRecoveryCompleted:0");
     ref1.tell(1);

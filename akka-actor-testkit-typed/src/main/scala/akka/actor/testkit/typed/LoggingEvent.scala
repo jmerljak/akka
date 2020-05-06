@@ -1,16 +1,17 @@
 /*
- * Copyright (C) 2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2019-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.testkit.typed
 
-import scala.compat.java8.OptionConverters._
-import akka.util.ccompat.JavaConverters._
-
 import java.util.Optional
+
+import scala.compat.java8.OptionConverters._
 
 import org.slf4j.Marker
 import org.slf4j.event.Level
+
+import akka.util.ccompat.JavaConverters._
 
 object LoggingEvent {
 
@@ -42,8 +43,8 @@ object LoggingEvent {
 }
 
 /**
- * Representation of logging event when testing with [[akka.actor.testkit.typed.scaladsl.LoggingEventFilter]]
- * or [[akka.actor.testkit.typed.javadsl.LoggingEventFilter]].
+ * Representation of logging event when testing with [[akka.actor.testkit.typed.scaladsl.LoggingTestKit]]
+ * or [[akka.actor.testkit.typed.javadsl.LoggingTestKit]].
  */
 final case class LoggingEvent(
     level: Level,

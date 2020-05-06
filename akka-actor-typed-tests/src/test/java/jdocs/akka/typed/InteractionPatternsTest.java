@@ -1,9 +1,10 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package jdocs.akka.typed;
 
+import akka.Done;
 import akka.actor.testkit.typed.javadsl.LogCapturing;
 import akka.actor.testkit.typed.javadsl.TestKitJunitResource;
 import akka.actor.typed.ActorRef;
@@ -14,15 +15,17 @@ import akka.actor.testkit.typed.javadsl.TestProbe;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
-import org.scalatest.junit.JUnitSuite;
+import org.scalatestplus.junit.JUnitSuite;
 
 import java.net.URI;
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
 
 import static jdocs.akka.typed.InteractionPatternsTest.Samples.*;
+import static org.junit.Assert.assertEquals;
 
 public class InteractionPatternsTest extends JUnitSuite {
 
@@ -84,7 +87,7 @@ public class InteractionPatternsTest extends JUnitSuite {
 
       private static Behavior<Request> onRequest(Request request) {
         // ... process request ...
-        request.replyTo.tell(new Response("Here's the cookies for " + request.query));
+        request.replyTo.tell(new Response("Here are the cookies for " + request.query));
         return Behaviors.same();
       }
       // #request-response-respond
@@ -96,6 +99,11 @@ public class InteractionPatternsTest extends JUnitSuite {
         // #request-response-send
         cookieFabric.tell(new CookieFabric.Request("give me cookies", context.getSelf()));
         // #request-response-send
+
+        // #ignore-reply
+        cookieFabric.tell(
+            new CookieFabric.Request("don't send cookies back", context.getSystem().ignoreRef()));
+        // #ignore-reply
       }
     }
 
@@ -170,7 +178,6 @@ public class InteractionPatternsTest extends JUnitSuite {
       }
 
       public static class Translator extends AbstractBehavior<Command> {
-        private final ActorContext<Command> context;
         private final ActorRef<Backend.Request> backend;
         private final ActorRef<Backend.Response> backendResponseAdapter;
 
@@ -178,7 +185,7 @@ public class InteractionPatternsTest extends JUnitSuite {
         private Map<Integer, ActorRef<URI>> inProgress = new HashMap<>();
 
         public Translator(ActorContext<Command> context, ActorRef<Backend.Request> backend) {
-          this.context = context;
+          super(context);
           this.backend = backend;
           this.backendResponseAdapter =
               context.messageAdapter(Backend.Response.class, WrappedBackendResponse::new);
@@ -204,13 +211,13 @@ public class InteractionPatternsTest extends JUnitSuite {
           Backend.Response response = wrapped.response;
           if (response instanceof Backend.JobStarted) {
             Backend.JobStarted rsp = (Backend.JobStarted) response;
-            context.getLog().info("Started {}", rsp.taskId);
+            getContext().getLog().info("Started {}", rsp.taskId);
           } else if (response instanceof Backend.JobProgress) {
             Backend.JobProgress rsp = (Backend.JobProgress) response;
-            context.getLog().info("Progress {}", rsp.taskId);
+            getContext().getLog().info("Progress {}", rsp.taskId);
           } else if (response instanceof Backend.JobCompleted) {
             Backend.JobCompleted rsp = (Backend.JobCompleted) response;
-            context.getLog().info("Completed {}", rsp.taskId);
+            getContext().getLog().info("Completed {}", rsp.taskId);
             inProgress.get(rsp.taskId).tell(rsp.result);
             inProgress.remove(rsp.taskId);
           } else {
@@ -292,13 +299,15 @@ public class InteractionPatternsTest extends JUnitSuite {
 
       private Behavior<Command> onIdleCommand(Command message) {
         timers.startSingleTimer(TIMER_KEY, Timeout.INSTANCE, after);
-        return new Active(message);
+        return Behaviors.setup(context -> new Active(context, message));
       }
 
       private class Active extends AbstractBehavior<Command> {
+
         private final List<Command> buffer = new ArrayList<>();
 
-        Active(Command firstCommand) {
+        Active(ActorContext<Command> context, Command firstCommand) {
+          super(context);
           buffer.add(firstCommand);
         }
 
@@ -331,6 +340,14 @@ public class InteractionPatternsTest extends JUnitSuite {
 
     // #actor-ask
     public class Hal extends AbstractBehavior<Hal.Command> {
+
+      public Behavior<Hal.Command> create() {
+        return Behaviors.setup(Hal::new);
+      }
+
+      private Hal(ActorContext<Command> context) {
+        super(context);
+      }
 
       public interface Command {}
 
@@ -380,10 +397,8 @@ public class InteractionPatternsTest extends JUnitSuite {
         return Behaviors.setup(context -> new Dave(context, hal));
       }
 
-      private final ActorContext<Command> context;
-
       private Dave(ActorContext<Command> context, ActorRef<Hal.Command> hal) {
-        this.context = context;
+        super(context);
 
         // asking someone requires a timeout, if the timeout hits without response
         // the ask is failed with a TimeoutException
@@ -435,7 +450,7 @@ public class InteractionPatternsTest extends JUnitSuite {
       }
 
       private Behavior<Command> onAdaptedResponse(AdaptedResponse response) {
-        context.getLog().info("Got response from HAL: {}", response.message);
+        getContext().getLog().info("Got response from HAL: {}", response.message);
         return this;
       }
     }
@@ -535,7 +550,7 @@ public class InteractionPatternsTest extends JUnitSuite {
 
       private Behavior<Command> onLeaveHome(LeaveHome message) {
         context.spawn(
-            new PrepareToLeaveHome(message.who, message.respondTo, keyCabinet, drawer),
+            PrepareToLeaveHome.create(message.who, message.respondTo, keyCabinet, drawer),
             "leaving" + message.who);
         return Behaviors.same();
       }
@@ -548,6 +563,15 @@ public class InteractionPatternsTest extends JUnitSuite {
 
     // per session actor behavior
     class PrepareToLeaveHome extends AbstractBehavior<Object> {
+      static Behavior<Object> create(
+          String whoIsLeaving,
+          ActorRef<Home.ReadyToLeaveHome> replyTo,
+          ActorRef<KeyCabinet.GetKeys> keyCabinet,
+          ActorRef<Drawer.GetWallet> drawer) {
+        return Behaviors.setup(
+            context -> new PrepareToLeaveHome(context, whoIsLeaving, replyTo, keyCabinet, drawer));
+      }
+
       private final String whoIsLeaving;
       private final ActorRef<Home.ReadyToLeaveHome> replyTo;
       private final ActorRef<KeyCabinet.GetKeys> keyCabinet;
@@ -555,11 +579,13 @@ public class InteractionPatternsTest extends JUnitSuite {
       private Optional<Wallet> wallet = Optional.empty();
       private Optional<Keys> keys = Optional.empty();
 
-      PrepareToLeaveHome(
+      private PrepareToLeaveHome(
+          ActorContext<Object> context,
           String whoIsLeaving,
           ActorRef<Home.ReadyToLeaveHome> replyTo,
           ActorRef<KeyCabinet.GetKeys> keyCabinet,
           ActorRef<Drawer.GetWallet> drawer) {
+        super(context);
         this.whoIsLeaving = whoIsLeaving;
         this.replyTo = replyTo;
         this.keyCabinet = keyCabinet;
@@ -599,24 +625,56 @@ public class InteractionPatternsTest extends JUnitSuite {
 
   interface StandaloneAskSample {
     // #standalone-ask
-    public class CookieFabric {
+    public class CookieFabric extends AbstractBehavior<CookieFabric.Command> {
 
       interface Command {}
 
       public static class GiveMeCookies implements Command {
-        public final ActorRef<Cookies> cookies;
+        public final int count;
+        public final ActorRef<Reply> replyTo;
 
-        public GiveMeCookies(ActorRef<Cookies> cookies) {
-          this.cookies = cookies;
+        public GiveMeCookies(int count, ActorRef<Reply> replyTo) {
+          this.count = count;
+          this.replyTo = replyTo;
         }
       }
 
-      public static class Cookies {
+      interface Reply {}
+
+      public static class Cookies implements Reply {
         public final int count;
 
         public Cookies(int count) {
           this.count = count;
         }
+      }
+
+      public static class InvalidRequest implements Reply {
+        public final String reason;
+
+        public InvalidRequest(String reason) {
+          this.reason = reason;
+        }
+      }
+
+      public static Behavior<Command> create() {
+        return Behaviors.setup(CookieFabric::new);
+      }
+
+      private CookieFabric(ActorContext<Command> context) {
+        super(context);
+      }
+
+      @Override
+      public Receive<Command> createReceive() {
+        return newReceiveBuilder().onMessage(GiveMeCookies.class, this::onGiveMeCookies).build();
+      }
+
+      private Behavior<Command> onGiveMeCookies(GiveMeCookies request) {
+        if (request.count >= 5) request.replyTo.tell(new InvalidRequest("Too many cookies."));
+        else request.replyTo.tell(new Cookies(request.count));
+
+        return this;
       }
     }
     // #standalone-ask
@@ -627,24 +685,184 @@ public class InteractionPatternsTest extends JUnitSuite {
 
       public void askAndPrint(
           ActorSystem<Void> system, ActorRef<CookieFabric.Command> cookieFabric) {
-        CompletionStage<CookieFabric.Cookies> result =
+        CompletionStage<CookieFabric.Reply> result =
             AskPattern.ask(
                 cookieFabric,
-                CookieFabric.GiveMeCookies::new,
+                replyTo -> new CookieFabric.GiveMeCookies(3, replyTo),
                 // asking someone requires a timeout and a scheduler, if the timeout hits without
-                // response
-                // the ask is failed with a TimeoutException
+                // response the ask is failed with a TimeoutException
                 Duration.ofSeconds(3),
                 system.scheduler());
 
         result.whenComplete(
-            (cookies, failure) -> {
-              if (cookies != null) System.out.println("Yay, cookies!");
-              else System.out.println("Boo! didn't get cookies in time.");
+            (reply, failure) -> {
+              if (reply instanceof CookieFabric.Cookies)
+                System.out.println("Yay, " + ((CookieFabric.Cookies) reply).count + " cookies!");
+              else if (reply instanceof CookieFabric.InvalidRequest)
+                System.out.println(
+                    "No cookies for me. " + ((CookieFabric.InvalidRequest) reply).reason);
+              else System.out.println("Boo! didn't get cookies in time. " + failure);
             });
       }
       // #standalone-ask
+
+      public void askAndMapInvalid(
+          ActorSystem<Void> system, ActorRef<CookieFabric.Command> cookieFabric) {
+        // #standalone-ask-fail-future
+        CompletionStage<CookieFabric.Reply> result =
+            AskPattern.ask(
+                cookieFabric,
+                replyTo -> new CookieFabric.GiveMeCookies(3, replyTo),
+                Duration.ofSeconds(3),
+                system.scheduler());
+
+        CompletionStage<CookieFabric.Cookies> cookies =
+            result.thenCompose(
+                (CookieFabric.Reply reply) -> {
+                  if (reply instanceof CookieFabric.Cookies) {
+                    return CompletableFuture.completedFuture((CookieFabric.Cookies) reply);
+                  } else if (reply instanceof CookieFabric.InvalidRequest) {
+                    CompletableFuture<CookieFabric.Cookies> failed = new CompletableFuture<>();
+                    failed.completeExceptionally(
+                        new IllegalArgumentException(((CookieFabric.InvalidRequest) reply).reason));
+                    return failed;
+                  } else {
+                    throw new IllegalStateException("Unexpected reply: " + reply.getClass());
+                  }
+                });
+
+        cookies.whenComplete(
+            (cookiesReply, failure) -> {
+              if (cookies != null) System.out.println("Yay, " + cookiesReply.count + " cookies!");
+              else System.out.println("Boo! didn't get cookies in time. " + failure);
+            });
+        // #standalone-ask-fail-future
+      }
     }
+  }
+
+  interface PipeToSelfSample {
+    // #pipeToSelf
+    public interface CustomerDataAccess {
+      CompletionStage<Done> update(Customer customer);
+    }
+
+    public class Customer {
+      public final String id;
+      public final long version;
+      public final String name;
+      public final String address;
+
+      public Customer(String id, long version, String name, String address) {
+        this.id = id;
+        this.version = version;
+        this.name = name;
+        this.address = address;
+      }
+    }
+
+    public class CustomerRepository extends AbstractBehavior<CustomerRepository.Command> {
+
+      private static final int MAX_OPERATIONS_IN_PROGRESS = 10;
+
+      interface Command {}
+
+      public static class Update implements Command {
+        public final Customer customer;
+        public final ActorRef<OperationResult> replyTo;
+
+        public Update(Customer customer, ActorRef<OperationResult> replyTo) {
+          this.customer = customer;
+          this.replyTo = replyTo;
+        }
+      }
+
+      interface OperationResult {}
+
+      public static class UpdateSuccess implements OperationResult {
+        public final String id;
+
+        public UpdateSuccess(String id) {
+          this.id = id;
+        }
+      }
+
+      public static class UpdateFailure implements OperationResult {
+        public final String id;
+        public final String reason;
+
+        public UpdateFailure(String id, String reason) {
+          this.id = id;
+          this.reason = reason;
+        }
+      }
+
+      private static class WrappedUpdateResult implements Command {
+        public final OperationResult result;
+        public final ActorRef<OperationResult> replyTo;
+
+        private WrappedUpdateResult(OperationResult result, ActorRef<OperationResult> replyTo) {
+          this.result = result;
+          this.replyTo = replyTo;
+        }
+      }
+
+      public static Behavior<Command> create(CustomerDataAccess dataAccess) {
+        return Behaviors.setup(context -> new CustomerRepository(context, dataAccess));
+      }
+
+      private final CustomerDataAccess dataAccess;
+      private int operationsInProgress = 0;
+
+      private CustomerRepository(ActorContext<Command> context, CustomerDataAccess dataAccess) {
+        super(context);
+        this.dataAccess = dataAccess;
+      }
+
+      @Override
+      public Receive<Command> createReceive() {
+        return newReceiveBuilder()
+            .onMessage(Update.class, this::onUpdate)
+            .onMessage(WrappedUpdateResult.class, this::onUpdateResult)
+            .build();
+      }
+
+      private Behavior<Command> onUpdate(Update command) {
+        if (operationsInProgress == MAX_OPERATIONS_IN_PROGRESS) {
+          command.replyTo.tell(
+              new UpdateFailure(
+                  command.customer.id,
+                  "Max " + MAX_OPERATIONS_IN_PROGRESS + " concurrent operations supported"));
+        } else {
+          // increase operationsInProgress counter
+          operationsInProgress++;
+          CompletionStage<Done> futureResult = dataAccess.update(command.customer);
+          getContext()
+              .pipeToSelf(
+                  futureResult,
+                  (ok, exc) -> {
+                    if (exc == null)
+                      return new WrappedUpdateResult(
+                          new UpdateSuccess(command.customer.id), command.replyTo);
+                    else
+                      return new WrappedUpdateResult(
+                          new UpdateFailure(command.customer.id, exc.getMessage()),
+                          command.replyTo);
+                  });
+        }
+        return this;
+      }
+
+      private Behavior<Command> onUpdateResult(WrappedUpdateResult wrapped) {
+        // decrease operationsInProgress counter
+        operationsInProgress--;
+        // send result to original requestor
+        wrapped.replyTo.tell(wrapped.result);
+        return this;
+      }
+    }
+    // #pipeToSelf
+
   }
 
   @ClassRule public static final TestKitJunitResource testKit = new TestKitJunitResource();
@@ -681,5 +899,30 @@ public class InteractionPatternsTest extends JUnitSuite {
     buncher.tell(msgTwo);
     probe.expectNoMessage();
     probe.expectMessage(Duration.ofSeconds(2), new Buncher.Batch(Arrays.asList(msgOne, msgTwo)));
+  }
+
+  @Test
+  public void testPipeToSelf() {
+
+    PipeToSelfSample.CustomerDataAccess dataAccess =
+        new PipeToSelfSample.CustomerDataAccess() {
+          @Override
+          public CompletionStage<Done> update(PipeToSelfSample.Customer customer) {
+            return CompletableFuture.completedFuture(Done.getInstance());
+          }
+        };
+
+    ActorRef<PipeToSelfSample.CustomerRepository.Command> repository =
+        testKit.spawn(PipeToSelfSample.CustomerRepository.create(dataAccess));
+    TestProbe<PipeToSelfSample.CustomerRepository.OperationResult> probe =
+        testKit.createTestProbe(PipeToSelfSample.CustomerRepository.OperationResult.class);
+
+    repository.tell(
+        new PipeToSelfSample.CustomerRepository.Update(
+            new PipeToSelfSample.Customer("123", 1L, "Alice", "Fairy tail road 7"),
+            probe.getRef()));
+    assertEquals(
+        "123",
+        probe.expectMessageClass(PipeToSelfSample.CustomerRepository.UpdateSuccess.class).id);
   }
 }

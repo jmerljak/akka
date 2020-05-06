@@ -1,13 +1,15 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package docs.akka.cluster.typed
 
 import akka.actor.testkit.typed.scaladsl.LogCapturing
 import akka.testkit.SocketUtil
+import com.github.ghik.silencer.silent
 import com.typesafe.config.ConfigFactory
-import org.scalatest.{ Matchers, WordSpec }
+import org.scalatest.wordspec.AnyWordSpec
+import org.scalatest.matchers.should.Matchers
 //#cluster-imports
 import akka.actor.typed._
 import akka.actor.typed.scaladsl._
@@ -48,9 +50,60 @@ akka {
         akka.remote.classic.netty.tcp.port = 0
         akka.remote.artery.canonical.port = 0
      """).withFallback(configSystem1)
+
+  def illustrateJoinSeedNodes(): Unit = {
+    val system: ActorSystem[_] = ???
+
+    //#join-seed-nodes
+    import akka.actor.Address
+    import akka.actor.AddressFromURIString
+    import akka.cluster.typed.JoinSeedNodes
+
+    val seedNodes: List[Address] =
+      List("akka://ClusterSystem@127.0.0.1:2551", "akka://ClusterSystem@127.0.0.1:2552").map(AddressFromURIString.parse)
+    Cluster(system).manager ! JoinSeedNodes(seedNodes)
+    //#join-seed-nodes
+  }
+
+  object Backend {
+    def apply(): Behavior[_] = Behaviors.empty
+  }
+
+  object Frontend {
+    def apply(): Behavior[_] = Behaviors.empty
+  }
+
+  def illustrateRoles(): Unit = {
+    val context: ActorContext[_] = ???
+
+    //#hasRole
+    val selfMember = Cluster(context.system).selfMember
+    if (selfMember.hasRole("backend")) {
+      context.spawn(Backend(), "back")
+    } else if (selfMember.hasRole("frontend")) {
+      context.spawn(Frontend(), "front")
+    }
+    //#hasRole
+  }
+
+  @silent("never used")
+  def illustrateDcAccess(): Unit = {
+    val system: ActorSystem[_] = ???
+
+    //#dcAccess
+    val cluster = Cluster(system)
+    // this node's data center
+    val dc = cluster.selfMember.dataCenter
+    // all known data centers
+    val allDc = cluster.state.allDataCenters
+    // a specific member's data center
+    val aMember = cluster.state.members.head
+    val aDc = aMember.dataCenter
+    //#dcAccess
+  }
 }
 
-class BasicClusterConfigSpec extends WordSpec with ScalaFutures with Eventually with Matchers with LogCapturing {
+class BasicClusterConfigSpec extends AnyWordSpec with ScalaFutures with Eventually with Matchers with LogCapturing {
   import BasicClusterExampleSpec._
 
   implicit override val patienceConfig =
@@ -104,7 +157,7 @@ akka {
 
 }
 
-class BasicClusterManualSpec extends WordSpec with ScalaFutures with Eventually with Matchers with LogCapturing {
+class BasicClusterManualSpec extends AnyWordSpec with ScalaFutures with Eventually with Matchers with LogCapturing {
 
   import BasicClusterManualSpec._
 

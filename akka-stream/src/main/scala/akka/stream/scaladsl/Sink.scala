@@ -1,24 +1,8 @@
 /*
- * Copyright (C) 2014-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2014-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.scaladsl
-
-import akka.actor.ActorRef
-import akka.actor.Status
-import akka.annotation.InternalApi
-import akka.dispatch.ExecutionContexts
-import akka.stream.impl.Stages.DefaultAttributes
-import akka.stream.impl._
-import akka.stream.impl.fusing.GraphStages
-import akka.stream.stage._
-import akka.stream.javadsl
-import akka.stream._
-import akka.util.ccompat._
-import akka.Done
-import akka.NotUsed
-import org.reactivestreams.Publisher
-import org.reactivestreams.Subscriber
 
 import scala.annotation.tailrec
 import scala.annotation.unchecked.uncheckedVariance
@@ -28,6 +12,23 @@ import scala.concurrent.Future
 import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
+
+import org.reactivestreams.Publisher
+import org.reactivestreams.Subscriber
+
+import akka.Done
+import akka.NotUsed
+import akka.actor.ActorRef
+import akka.actor.Status
+import akka.annotation.InternalApi
+import akka.dispatch.ExecutionContexts
+import akka.stream._
+import akka.stream.impl._
+import akka.stream.impl.Stages.DefaultAttributes
+import akka.stream.impl.fusing.GraphStages
+import akka.stream.javadsl
+import akka.stream.stage._
+import akka.util.ccompat._
 
 /**
  * A `Sink` is a set of stream processing steps that has one open input.
@@ -194,8 +195,7 @@ object Sink {
       .fromGraph(new HeadOptionStage[T])
       .withAttributes(DefaultAttributes.headSink)
       .mapMaterializedValue(e =>
-        e.map(_.getOrElse(throw new NoSuchElementException("head of empty stream")))(
-          ExecutionContexts.sameThreadExecutionContext))
+        e.map(_.getOrElse(throw new NoSuchElementException("head of empty stream")))(ExecutionContexts.parasitic))
 
   /**
    * A `Sink` that materializes into a `Future` of the optional first value received.
@@ -217,7 +217,7 @@ object Sink {
   def last[T]: Sink[T, Future[T]] = {
     Sink.fromGraph(new TakeLastStage[T](1)).withAttributes(DefaultAttributes.lastSink).mapMaterializedValue { e =>
       e.map(_.headOption.getOrElse(throw new NoSuchElementException("last of empty stream")))(
-        ExecutionContexts.sameThreadExecutionContext)
+        ExecutionContexts.parasitic)
     }
   }
 
@@ -230,7 +230,7 @@ object Sink {
    */
   def lastOption[T]: Sink[T, Future[Option[T]]] = {
     Sink.fromGraph(new TakeLastStage[T](1)).withAttributes(DefaultAttributes.lastOptionSink).mapMaterializedValue { e =>
-      e.map(_.headOption)(ExecutionContexts.sameThreadExecutionContext)
+      e.map(_.headOption)(ExecutionContexts.parasitic)
     }
   }
 
@@ -453,10 +453,7 @@ object Sink {
    * to use a bounded mailbox with zero `mailbox-push-timeout-time` or use a rate
    * limiting operator in front of this `Sink`.
    */
-  @InternalApi private[akka] def actorRef[T](
-      ref: ActorRef,
-      onCompleteMessage: Any,
-      onFailureMessage: Throwable => Any): Sink[T, NotUsed] =
+  def actorRef[T](ref: ActorRef, onCompleteMessage: Any, onFailureMessage: Throwable => Any): Sink[T, NotUsed] =
     fromGraph(new ActorRefSinkStage[T](ref, onCompleteMessage, onFailureMessage))
 
   /**
@@ -474,6 +471,7 @@ object Sink {
    * to use a bounded mailbox with zero `mailbox-push-timeout-time` or use a rate
    * limiting operator in front of this `Sink`.
    */
+  @deprecated("Use variant accepting both on complete and on failure message", "2.6.0")
   def actorRef[T](ref: ActorRef, onCompleteMessage: Any): Sink[T, NotUsed] =
     fromGraph(new ActorRefSinkStage[T](ref, onCompleteMessage, t => Status.Failure(t)))
 
@@ -525,8 +523,29 @@ object Sink {
    * will be sent to the destination actor.
    * When the stream is completed with failure - result of `onFailureMessage(throwable)`
    * function will be sent to the destination actor.
-   *
    */
+  def actorRefWithBackpressure[T](
+      ref: ActorRef,
+      onInitMessage: Any,
+      ackMessage: Any,
+      onCompleteMessage: Any,
+      onFailureMessage: Throwable => Any): Sink[T, NotUsed] =
+    actorRefWithAck(ref, _ => identity, _ => onInitMessage, ackMessage, onCompleteMessage, onFailureMessage)
+
+  /**
+   * Sends the elements of the stream to the given `ActorRef` that sends back back-pressure signal.
+   * First element is always `onInitMessage`, then stream is waiting for acknowledgement message
+   * `ackMessage` from the given actor which means that it is ready to process
+   * elements. It also requires `ackMessage` message after each stream element
+   * to make backpressure work.
+   *
+   * If the target actor terminates the stream will be canceled.
+   * When the stream is completed successfully the given `onCompleteMessage`
+   * will be sent to the destination actor.
+   * When the stream is completed with failure - result of `onFailureMessage(throwable)`
+   * function will be sent to the destination actor.
+   */
+  @deprecated("Use actorRefWithBackpressure accepting completion and failure matchers instead", "2.6.0")
   def actorRefWithAck[T](
       ref: ActorRef,
       onInitMessage: Any,
@@ -534,6 +553,27 @@ object Sink {
       onCompleteMessage: Any,
       onFailureMessage: (Throwable) => Any = Status.Failure): Sink[T, NotUsed] =
     actorRefWithAck(ref, _ => identity, _ => onInitMessage, ackMessage, onCompleteMessage, onFailureMessage)
+
+  /**
+   * Creates a `Sink` that is materialized as an [[akka.stream.scaladsl.SinkQueueWithCancel]].
+   * [[akka.stream.scaladsl.SinkQueueWithCancel.pull]] method is pulling element from the stream and returns ``Future[Option[T]``.
+   * `Future` completes when element is available.
+   *
+   * Before calling pull method second time you need to ensure that number of pending pulls is less then ``maxConcurrentPulls``
+   * or wait until some of the previous Futures completes.
+   * Pull returns Failed future with ''IllegalStateException'' if there will be more then ``maxConcurrentPulls`` number of pending pulls.
+   *
+   * `Sink` will request at most number of elements equal to size of `inputBuffer` from
+   * upstream and then stop back pressure.  You can configure size of input
+   * buffer by using [[Sink.withAttributes]] method.
+   *
+   * For stream completion you need to pull all elements from [[akka.stream.scaladsl.SinkQueueWithCancel]] including last None
+   * as completion marker
+   *
+   * See also [[akka.stream.scaladsl.SinkQueueWithCancel]]
+   */
+  def queue[T](maxConcurrentPulls: Int): Sink[T, SinkQueueWithCancel[T]] =
+    Sink.fromGraph(new QueueSink(maxConcurrentPulls))
 
   /**
    * Creates a `Sink` that is materialized as an [[akka.stream.scaladsl.SinkQueueWithCancel]].
@@ -552,8 +592,7 @@ object Sink {
    *
    * See also [[akka.stream.scaladsl.SinkQueueWithCancel]]
    */
-  def queue[T](): Sink[T, SinkQueueWithCancel[T]] =
-    Sink.fromGraph(new QueueSink())
+  def queue[T](): Sink[T, SinkQueueWithCancel[T]] = queue(1)
 
   /**
    * Creates a real `Sink` upon receiving the first element. Internal `Sink` will not be created if there are no elements,
@@ -564,14 +603,11 @@ object Sink {
    * sink fails then the `Future` is completed with the exception.
    * Otherwise the `Future` is completed with the materialized value of the internal sink.
    */
-  @Deprecated
-  @deprecated(
-    "Use lazyInitAsync instead. (lazyInitAsync no more needs a fallback function and the materialized value more clearly indicates if the internal sink was materialized or not.)",
-    "2.5.11")
+  @deprecated("Use 'Sink.lazyFutureSink' in combination with 'Flow.prefixAndTail(1)' instead", "2.6.0")
   def lazyInit[T, M](sinkFactory: T => Future[Sink[T, M]], fallback: () => M): Sink[T, Future[M]] =
     Sink
       .fromGraph(new LazySink[T, M](sinkFactory))
-      .mapMaterializedValue(_.map(_.getOrElse(fallback()))(ExecutionContexts.sameThreadExecutionContext))
+      .mapMaterializedValue(_.recover { case _: NeverMaterializedException => fallback() }(ExecutionContexts.parasitic))
 
   /**
    * Creates a real `Sink` upon receiving the first element. Internal `Sink` will not be created if there are no elements,
@@ -582,7 +618,45 @@ object Sink {
    * sink fails then the `Future` is completed with the exception.
    * Otherwise the `Future` is completed with the materialized value of the internal sink.
    */
+  @deprecated("Use 'Sink.lazyFutureSink' instead", "2.6.0")
   def lazyInitAsync[T, M](sinkFactory: () => Future[Sink[T, M]]): Sink[T, Future[Option[M]]] =
-    Sink.fromGraph(new LazySink[T, M](_ => sinkFactory()))
+    Sink.fromGraph(new LazySink[T, M](_ => sinkFactory())).mapMaterializedValue { m =>
+      implicit val ec = ExecutionContexts.parasitic
+      m.map(Option.apply _).recover { case _: NeverMaterializedException => None }
+    }
+
+  /**
+   * Turn a `Future[Sink]` into a Sink that will consume the values of the source when the future completes successfully.
+   * If the `Future` is completed with a failure the stream is failed.
+   *
+   * The materialized future value is completed with the materialized value of the future sink or failed with a
+   * [[NeverMaterializedException]] if upstream fails or downstream cancels before the future has completed.
+   */
+  def futureSink[T, M](future: Future[Sink[T, M]]): Sink[T, Future[M]] =
+    lazyFutureSink[T, M](() => future)
+
+  /**
+   * Defers invoking the `create` function to create a sink until there is a first element passed from upstream.
+   *
+   * The materialized future value is completed with the materialized value of the created sink when that has successfully
+   * been materialized.
+   *
+   * If the `create` function throws or returns or the stream fails to materialize, in this
+   * case the materialized future value is failed with a [[akka.stream.NeverMaterializedException]].
+   */
+  def lazySink[T, M](create: () => Sink[T, M]): Sink[T, Future[M]] =
+    lazyFutureSink(() => Future.successful(create()))
+
+  /**
+   * Defers invoking the `create` function to create a future sink until there is a first element passed from upstream.
+   *
+   * The materialized future value is completed with the materialized value of the created sink when that has successfully
+   * been materialized.
+   *
+   * If the `create` function throws or returns a future that is failed, or the stream fails to materialize, in this
+   * case the materialized future value is failed with a [[akka.stream.NeverMaterializedException]].
+   */
+  def lazyFutureSink[T, M](create: () => Future[Sink[T, M]]): Sink[T, Future[M]] =
+    Sink.fromGraph(new LazySink(_ => create()))
 
 }

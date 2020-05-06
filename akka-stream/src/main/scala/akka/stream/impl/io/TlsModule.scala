@@ -1,8 +1,10 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.impl.io
+
+import scala.util.Try
 
 import javax.net.ssl.{ SSLEngine, SSLSession }
 
@@ -10,12 +12,10 @@ import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.annotation.InternalApi
 import akka.stream._
-import akka.stream.impl.StreamLayout.AtomicModule
 import akka.stream.TLSProtocol._
 import akka.stream.impl.{ TlsModuleIslandTag, TraversalBuilder }
+import akka.stream.impl.StreamLayout.AtomicModule
 import akka.util.ByteString
-
-import scala.util.Try
 
 /**
  * INTERNAL API.

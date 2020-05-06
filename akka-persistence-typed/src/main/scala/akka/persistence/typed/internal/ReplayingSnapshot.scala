@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.persistence.typed.internal
@@ -8,9 +8,11 @@ import akka.actor.typed.Behavior
 import akka.actor.typed.internal.PoisonPill
 import akka.actor.typed.scaladsl.{ ActorContext, Behaviors }
 import akka.annotation.{ InternalApi, InternalStableApi }
+import akka.persistence._
 import akka.persistence.SnapshotProtocol.LoadSnapshotFailed
 import akka.persistence.SnapshotProtocol.LoadSnapshotResult
-import akka.persistence._
+import akka.persistence.typed.RecoveryFailed
+import akka.persistence.typed.internal.EventSourcedBehaviorImpl.GetState
 import akka.util.unused
 
 /**
@@ -44,6 +46,8 @@ private[akka] class ReplayingSnapshot[C, E, S](override val setup: BehaviorSetup
 
   import InternalProtocol._
 
+  onRecoveryStart(setup.context)
+
   def createBehavior(receivedPoisonPillInPreviousPhase: Boolean): Behavior[InternalProtocol] = {
     // protect against snapshot stalling forever because of journal overloaded and such
     setup.startRecoveryTimer(snapshot = true)
@@ -63,33 +67,45 @@ private[akka] class ReplayingSnapshot[C, E, S](override val setup: BehaviorSetup
               Behaviors.unhandled
             } else
               onCommand(cmd)
-          case RecoveryPermitGranted => Behaviors.unhandled // should not happen, we already have the permit
+          case get: GetState[S @unchecked] => stashInternal(get)
+          case RecoveryPermitGranted       => Behaviors.unhandled // should not happen, we already have the permit
         }
         .receiveSignal(returnPermitOnStop.orElse {
           case (_, PoisonPill) =>
             stay(receivedPoisonPill = true)
           case (_, signal) =>
-            setup.onSignal(setup.emptyState, signal, catchAndLog = true)
-            Behaviors.same
+            if (setup.onSignal(setup.emptyState, signal, catchAndLog = true)) Behaviors.same
+            else Behaviors.unhandled
         })
     }
     stay(receivedPoisonPillInPreviousPhase)
   }
 
   /**
-   * Called whenever a message replay fails. By default it logs the error.
+   * Called whenever snapshot recovery fails.
    *
-   * The actor is always stopped after this method has been invoked.
+   * This method throws `JournalFailureException` which will be caught by the internal
+   * supervision strategy to stop or restart the actor with backoff.
    *
    * @param cause failure cause.
    */
   private def onRecoveryFailure(cause: Throwable): Behavior[InternalProtocol] = {
     onRecoveryFailed(setup.context, cause)
+    setup.onSignal(setup.emptyState, RecoveryFailed(cause), catchAndLog = true)
     setup.cancelRecoveryTimer()
-    setup.log.error(s"Persistence failure when replaying snapshot, due to: ${cause.getMessage}", cause)
-    Behaviors.stopped
+
+    tryReturnRecoveryPermit("on snapshot recovery failure: " + cause.getMessage)
+
+    if (setup.log.isDebugEnabled)
+      setup.log.debug("Recovery failure for persistenceId [{}]", setup.persistenceId)
+
+    val msg = s"Exception during recovery from snapshot. " +
+      s"PersistenceId [${setup.persistenceId.id}]. ${cause.getMessage}"
+    throw new JournalFailureException(msg, cause)
   }
 
+  @InternalStableApi
+  def onRecoveryStart(@unused context: ActorContext[_]): Unit = ()
   @InternalStableApi
   def onRecoveryFailed(@unused context: ActorContext[_], @unused reason: Throwable): Unit = ()
 
@@ -104,7 +120,6 @@ private[akka] class ReplayingSnapshot[C, E, S](override val setup: BehaviorSetup
   def onCommand(cmd: IncomingCommand[C]): Behavior[InternalProtocol] = {
     // during recovery, stash all incoming commands
     stashInternal(cmd)
-    Behaviors.same
   }
 
   def onJournalResponse(response: JournalProtocol.Response): Behavior[InternalProtocol] = {

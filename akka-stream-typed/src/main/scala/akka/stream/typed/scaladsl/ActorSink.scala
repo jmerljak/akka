@@ -1,12 +1,12 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.typed.scaladsl
 
+import akka.NotUsed
 import akka.actor.typed._
 import akka.stream.scaladsl._
-import akka.NotUsed
 
 /**
  * Collection of Sinks aimed at integrating with typed Actors.
@@ -46,7 +46,7 @@ object ActorSink {
    * When the stream is completed with failure - result of `onFailureMessage(throwable)`
    * function will be sent to the destination actor.
    */
-  def actorRefWithAck[T, M, A](
+  def actorRefWithBackpressure[T, M, A](
       ref: ActorRef[M],
       messageAdapter: (ActorRef[A], T) => M,
       onInitMessage: ActorRef[A] => M,

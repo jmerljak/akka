@@ -1,11 +1,19 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote.artery
 package aeron
 
 import java.io.File
+
+import scala.concurrent.Await
+import scala.concurrent.duration._
+import scala.util.control.NoStackTrace
+
+import io.aeron.Aeron
+import io.aeron.driver.MediaDriver
+import org.agrona.IoUtil
 
 import akka.actor.ExtendedActorSystem
 import akka.remote.artery.aeron.AeronSink.GaveUpMessageException
@@ -14,13 +22,6 @@ import akka.stream.scaladsl.Source
 import akka.testkit.AkkaSpec
 import akka.testkit.ImplicitSender
 import akka.testkit.SocketUtil
-import io.aeron.Aeron
-import io.aeron.driver.MediaDriver
-import org.agrona.IoUtil
-
-import scala.concurrent.Await
-import scala.concurrent.duration._
-import scala.util.control.NoStackTrace
 
 class AeronSinkSpec extends AkkaSpec("""
     akka.stream.materializer.debug.fuzzing-mode = on
@@ -58,7 +59,7 @@ class AeronSinkSpec extends AkkaSpec("""
       val channel = s"aeron:udp?endpoint=localhost:$port"
 
       Source
-        .fromGraph(new AeronSource(channel, 1, aeron, taskRunner, pool, IgnoreEventSink, 0))
+        .fromGraph(new AeronSource(channel, 1, aeron, taskRunner, pool, NoOpRemotingFlightRecorder, 0))
         // fail receiver stream on first message
         .map(_ => throw new RuntimeException("stop") with NoStackTrace)
         .runWith(Sink.ignore)
@@ -73,7 +74,7 @@ class AeronSinkSpec extends AkkaSpec("""
           envelope.byteBuffer.flip()
           envelope
         }
-        .runWith(new AeronSink(channel, 1, aeron, taskRunner, pool, 500.millis, IgnoreEventSink))
+        .runWith(new AeronSink(channel, 1, aeron, taskRunner, pool, 500.millis, NoOpRemotingFlightRecorder))
 
       // without the give up timeout the stream would not complete/fail
       intercept[GaveUpMessageException] {

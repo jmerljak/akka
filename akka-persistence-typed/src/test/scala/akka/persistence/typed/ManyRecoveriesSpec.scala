@@ -1,21 +1,22 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.persistence.typed
 
-import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.scaladsl.adapter.TypedActorSystemOps
-import akka.persistence.typed.scaladsl.EventSourcedBehavior.CommandHandler
-import akka.persistence.typed.scaladsl.{ Effect, EventSourcedBehavior }
-import akka.testkit.TestLatch
-import akka.actor.testkit.typed.scaladsl.TestProbe
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import org.scalatest.wordspec.AnyWordSpecLike
+
 import akka.actor.testkit.typed.scaladsl.LogCapturing
-import org.scalatest.WordSpecLike
+import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import akka.actor.testkit.typed.scaladsl.TestProbe
+import akka.actor.typed.scaladsl.Behaviors
+import akka.actor.typed.scaladsl.adapter.TypedActorSystemOps
+import akka.persistence.typed.scaladsl.{ Effect, EventSourcedBehavior }
+import akka.persistence.typed.scaladsl.EventSourcedBehavior.CommandHandler
+import akka.testkit.TestLatch
 
 object ManyRecoveriesSpec {
 
@@ -28,7 +29,7 @@ object ManyRecoveriesSpec {
       probe: TestProbe[String],
       latch: Option[TestLatch]): EventSourcedBehavior[Cmd, Evt, String] =
     EventSourcedBehavior[Cmd, Evt, String](
-      persistenceId = PersistenceId(name),
+      persistenceId = PersistenceId.ofUniqueId(name),
       emptyState = "",
       commandHandler = CommandHandler.command {
         case Cmd(s) => Effect.persist(Evt(s)).thenRun(_ => probe.ref ! s"$name-$s")
@@ -58,7 +59,7 @@ class ManyRecoveriesSpec extends ScalaTestWithActorTestKit(s"""
     }
     akka.persistence.max-concurrent-recoveries = 3
     akka.persistence.journal.plugin = "akka.persistence.journal.inmem"
-    """) with WordSpecLike with LogCapturing {
+    """) with AnyWordSpecLike with LogCapturing {
 
   import ManyRecoveriesSpec._
 

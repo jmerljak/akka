@@ -1,21 +1,51 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.discovery.dns
 
 import java.net.{ Inet6Address, InetAddress }
 
-import akka.discovery.ServiceDiscovery
-import akka.discovery.ServiceDiscovery.{ Resolved, ResolvedTarget }
-import akka.io.dns.CachePolicy.Ttl
-import akka.io.dns.{ AAAARecord, ARecord, DnsProtocol, SRVRecord }
-import org.scalatest.{ Matchers, WordSpec }
-
 import scala.collection.{ immutable => im }
 import scala.concurrent.duration._
 
-class DnsServiceDiscoverySpec extends WordSpec with Matchers {
+import org.scalatest.concurrent.ScalaFutures
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpecLike
+
+import akka.actor.ActorRef
+import akka.actor.ExtendedActorSystem
+import akka.discovery
+import akka.discovery.ServiceDiscovery
+import akka.discovery.ServiceDiscovery.{ Resolved, ResolvedTarget }
+import akka.discovery.ServiceDiscovery.DiscoveryTimeoutException
+import akka.io.dns.{ AAAARecord, ARecord, DnsProtocol, SRVRecord }
+import akka.io.dns.CachePolicy.Ttl
+import akka.testkit.AkkaSpec
+import akka.testkit.TestProbe
+
+class DnsServiceDiscoverySpec extends AkkaSpec with AnyWordSpecLike with Matchers with ScalaFutures {
+
+  "DnsServiceDiscovery" must {
+    "fail future with DiscoveryTimeoutException if IP dns resolve does not respond" in {
+      val dnsProbe = TestProbe()
+      val underTest = new DnsServiceDiscovery(system.asInstanceOf[ExtendedActorSystem]) {
+        override def initializeDns(): ActorRef = dnsProbe.ref
+      }
+      val result = underTest.lookup("cats.com", 1.second)
+      result.failed.futureValue shouldBe a[DiscoveryTimeoutException]
+    }
+
+    "fail future with DiscoveryTimeoutException if SRV dns resolve does not respond" in {
+      val dnsProbe = TestProbe()
+      val underTest = new DnsServiceDiscovery(system.asInstanceOf[ExtendedActorSystem]) {
+        override def initializeDns(): ActorRef = dnsProbe.ref
+      }
+      val result = underTest.lookup(discovery.Lookup("cats.com").withPortName("dog").withProtocol("snake"), 1.second)
+      result.failed.futureValue shouldBe a[DiscoveryTimeoutException]
+    }
+  }
+
   "srvRecordsToResolved" must {
     "fill in ips from A records" in {
       val resolved = DnsProtocol.Resolved(
@@ -74,5 +104,6 @@ class DnsServiceDiscoverySpec extends WordSpec with Matchers {
         ResolvedTarget("kittens.com", Some(4), Some(InetAddress.getByName("::1"))),
         ResolvedTarget("kittens.com", Some(4), Some(InetAddress.getByName("::2"))))
     }
+
   }
 }

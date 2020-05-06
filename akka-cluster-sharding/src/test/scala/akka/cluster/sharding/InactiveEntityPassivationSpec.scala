@@ -1,17 +1,18 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster.sharding
 
 import scala.concurrent.duration._
 
+import com.typesafe.config.Config
+import com.typesafe.config.ConfigFactory
+
 import akka.actor.{ Actor, ActorRef, Props }
 import akka.cluster.Cluster
 import akka.cluster.sharding.InactiveEntityPassivationSpec.Entity.GotIt
 import akka.testkit.{ AkkaSpec, TestProbe }
-import com.typesafe.config.ConfigFactory
-import com.typesafe.config.Config
 
 object InactiveEntityPassivationSpec {
 
@@ -20,7 +21,6 @@ object InactiveEntityPassivationSpec {
     akka.actor.provider = "cluster"
     akka.remote.classic.netty.tcp.port = 0
     akka.remote.artery.canonical.port = 0
-    akka.actor.serialize-messages = off
     """)
 
   val enabledConfig = ConfigFactory.parseString("""

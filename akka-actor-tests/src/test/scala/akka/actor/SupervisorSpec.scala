@@ -1,26 +1,27 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor
 
-import language.postfixOps
-import org.scalatest.BeforeAndAfterEach
-
-import scala.concurrent.duration._
-import akka.{ Die, Ping }
-import akka.testkit.TestEvent._
-import akka.testkit._
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.concurrent.Await
-import akka.pattern.ask
+import scala.concurrent.duration._
+
+import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory
+import language.postfixOps
+import org.scalatest.BeforeAndAfterEach
+
+import akka.{ Die, Ping }
+import akka.ConfigurationException
 import akka.dispatch.MailboxType
 import akka.dispatch.MessageQueue
-import com.typesafe.config.Config
-import akka.ConfigurationException
+import akka.pattern.ask
 import akka.routing.RoundRobinPool
+import akka.testkit._
+import akka.testkit.TestEvent._
 import akka.util.unused
 
 object SupervisorSpec {
@@ -97,11 +98,10 @@ object SupervisorSpec {
   }
 
   val config = ConfigFactory.parseString("""
-akka.actor.serialize-messages = off
-error-mailbox {
-  mailbox-type = "akka.actor.SupervisorSpec$Mailbox"
-}
-""")
+    error-mailbox {
+      mailbox-type = "akka.actor.SupervisorSpec$Mailbox"
+    }
+    """)
 }
 
 class SupervisorSpec

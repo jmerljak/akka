@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster
@@ -10,14 +10,16 @@ import akka.actor._
 import akka.cluster.ClusterEvent.CurrentClusterState
 import akka.cluster.ClusterEvent.MemberEvent
 import akka.cluster.ClusterEvent.MemberJoined
-import akka.cluster.ClusterEvent.MemberUp
 import akka.cluster.ClusterEvent.MemberRemoved
+import akka.cluster.ClusterEvent.MemberUp
 import akka.cluster.ClusterEvent.MemberWeaklyUp
 import akka.dispatch.Dispatchers
+import akka.event.ActorWithLogClass
+import akka.event.Logging
 import akka.remote.FailureDetectorRegistry
+import akka.remote.RARP
 import akka.remote.RemoteSettings
 import akka.remote.RemoteWatcher
-import akka.remote.RARP
 
 /**
  * INTERNAL API
@@ -65,6 +67,8 @@ private[cluster] class ClusterRemoteWatcher(
   private val arteryEnabled = RARP(context.system).provider.remoteSettings.Artery.Enabled
   val cluster = Cluster(context.system)
   import cluster.selfAddress
+
+  override val log = Logging(context.system, ActorWithLogClass(this, ClusterLogClass.ClusterCore))
 
   private var pendingDelayedQuarantine: Set[UniqueAddress] = Set.empty
 

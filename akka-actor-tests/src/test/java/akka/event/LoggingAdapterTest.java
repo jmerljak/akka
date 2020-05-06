@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.event;
@@ -18,7 +18,7 @@ import com.typesafe.config.ConfigFactory;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.scalatest.junit.JUnitSuite;
+import org.scalatestplus.junit.JUnitSuite;
 
 import java.util.*;
 import java.time.Duration;
@@ -29,8 +29,7 @@ import static org.junit.Assert.assertSame;
 
 public class LoggingAdapterTest extends JUnitSuite {
 
-  private static final Config config =
-      ConfigFactory.parseString("akka.loglevel = DEBUG\n" + "akka.actor.serialize-messages = off");
+  private static final Config config = ConfigFactory.parseString("akka.loglevel = DEBUG\n");
 
   @Rule
   public AkkaJUnitActorSystemResource actorSystemResource =

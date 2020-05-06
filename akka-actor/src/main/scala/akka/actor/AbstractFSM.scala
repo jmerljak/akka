@@ -1,11 +1,12 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor
 
-import akka.util.JavaDurationConverters._
 import scala.concurrent.duration.FiniteDuration
+
+import akka.util.JavaDurationConverters._
 
 /**
  * Java API: compatible with lambda expressions
@@ -34,8 +35,9 @@ abstract class AbstractFSM[S, D] extends FSM[S, D] {
   import java.util.{ List => JList }
 
   import FSM._
-  import akka.japi.pf.FI._
+
   import akka.japi.pf._
+  import akka.japi.pf.FI._
 
   /**
    * Returns this AbstractActor's ActorContext
@@ -444,9 +446,9 @@ abstract class AbstractFSM[S, D] extends FSM[S, D] {
    * the reciprocal of the specified `delay`.
    *
    * Each timer has a `name` and if a new timer with same `name` is started
-   * the previous is cancelled and it's guaranteed that a message from the
-   * previous timer is not received, even though it might already be enqueued
-   * in the mailbox when the new timer is started.
+   * the previous is cancelled. It is guaranteed that a message from the
+   * previous timer is not received, even if it was already enqueued
+   * in the mailbox when the new timer was started.
    */
   def startTimerWithFixedDelay(name: String, msg: Any, delay: java.time.Duration): Unit =
     startTimerWithFixedDelay(name, msg, delay.asScala)
@@ -472,9 +474,9 @@ abstract class AbstractFSM[S, D] extends FSM[S, D] {
    * Therefore `startTimerWithFixedDelay` is often preferred.
    *
    * Each timer has a `name` and if a new timer with same `name` is started
-   * the previous is cancelled and it's guaranteed that a message from the
-   * previous timer is not received, even though it might already be enqueued
-   * in the mailbox when the new timer is started.
+   * the previous is cancelled. It is guaranteed that a message from the
+   * previous timer is not received, even if it was already enqueued
+   * in the mailbox when the new timer was started.
    */
   def startTimerAtFixedRate(name: String, msg: Any, interval: java.time.Duration): Unit =
     startTimerAtFixedRate(name, msg, interval.asScala)
@@ -484,9 +486,9 @@ abstract class AbstractFSM[S, D] extends FSM[S, D] {
    * the given `delay`.
    *
    * Each timer has a `name` and if a new timer with same `name` is started
-   * the previous is cancelled and it's guaranteed that a message from the
-   * previous timer is not received, even though it might already be enqueued
-   * in the mailbox when the new timer is started.
+   * the previous is cancelled. It is guaranteed that a message from the
+   * previous timer is not received, even if it was already enqueued
+   * in the mailbox when the new timer was started.
    */
   def startSingleTimer(name: String, msg: Any, delay: java.time.Duration): Unit =
     startSingleTimer(name, msg, delay.asScala)

@@ -1,10 +1,14 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote.artery
 
 import java.util.Queue
+
+import scala.concurrent.duration._
+
+import org.agrona.concurrent.ManyToOneConcurrentArrayQueue
 
 import akka.actor.Actor
 import akka.actor.Props
@@ -14,9 +18,6 @@ import akka.stream.testkit.TestSubscriber
 import akka.stream.testkit.scaladsl.TestSink
 import akka.testkit.AkkaSpec
 import akka.testkit.ImplicitSender
-import org.agrona.concurrent.ManyToOneConcurrentArrayQueue
-
-import scala.concurrent.duration._
 
 object SendQueueSpec {
 
@@ -49,7 +50,6 @@ object SendQueueSpec {
 }
 
 class SendQueueSpec extends AkkaSpec("""
-    akka.actor.serialize-messages = off
     akka.stream.materializer.debug.fuzzing-mode = on
     akka.stream.secret-test-fuzzing-warning-disable = yep
   """) with ImplicitSender {

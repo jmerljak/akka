@@ -1,17 +1,31 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed.internal.adapter
 
 import java.time.Duration
 
+import scala.concurrent.ExecutionContext
+import scala.concurrent.duration.FiniteDuration
+
 import akka.actor.Cancellable
 import akka.actor.typed.Scheduler
 import akka.annotation.InternalApi
 
-import scala.concurrent.ExecutionContext
-import scala.concurrent.duration.FiniteDuration
+/**
+ * INTERNAL API
+ */
+@InternalApi private[akka] object SchedulerAdapter {
+  def toClassic(scheduler: Scheduler): akka.actor.Scheduler =
+    scheduler match {
+      case s: SchedulerAdapter => s.classicScheduler
+      case _ =>
+        throw new UnsupportedOperationException(
+          "unknown Scheduler type " +
+          s"($scheduler of class ${scheduler.getClass.getName})")
+    }
+}
 
 /**
  * INTERNAL API

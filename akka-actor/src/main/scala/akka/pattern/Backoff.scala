@@ -1,16 +1,17 @@
 /*
- * Copyright (C) 2015-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2015-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.pattern
+
+import scala.concurrent.duration.{ Duration, FiniteDuration }
+
+import com.github.ghik.silencer.silent
 
 import akka.actor.{ OneForOneStrategy, Props, SupervisorStrategy }
 import akka.annotation.DoNotInherit
 import akka.pattern.internal.{ BackoffOnRestartSupervisor, BackoffOnStopSupervisor }
 import akka.util.JavaDurationConverters._
-import com.github.ghik.silencer.silent
-
-import scala.concurrent.duration.{ Duration, FiniteDuration }
 
 /**
  * @deprecated This API is superseded by the [[BackoffOpts]] object.
@@ -526,37 +527,37 @@ object Backoff {
 trait BackoffOptions {
 
   /**
-   * @see [[ExtendedBackoffOptions.withAutoReset()]]
+   * @see [[ExtendedBackoffOptions.withAutoReset]]
    */
   def withAutoReset(resetBackoff: FiniteDuration): BackoffOptions
 
   /**
-   * @see [[ExtendedBackoffOptions.withManualReset()]]
+   * @see [[ExtendedBackoffOptions.withManualReset]]
    */
   def withManualReset: BackoffOptions
 
   /**
-   * @see [[ExtendedBackoffOptions.withSupervisorStrategy()]]
+   * @see [[ExtendedBackoffOptions.withSupervisorStrategy]]
    */
   def withSupervisorStrategy(supervisorStrategy: OneForOneStrategy): BackoffOptions
 
   /**
-   * @see [[ExtendedBackoffOptions.withDefaultStoppingStrategy()]]
+   * @see [[ExtendedBackoffOptions.withDefaultStoppingStrategy]]
    */
   def withDefaultStoppingStrategy: BackoffOptions
 
   /**
-   * @see [[ExtendedBackoffOptions.withMaxNrOfRetries()]]
+   * @see [[ExtendedBackoffOptions.withMaxNrOfRetries]]
    */
   def withMaxNrOfRetries(maxNrOfRetries: Int): BackoffOptions
 
   /**
-   * @see [[ExtendedBackoffOptions.withReplyWhileStopped()]]
+   * @see [[ExtendedBackoffOptions.withReplyWhileStopped]]
    */
   def withReplyWhileStopped(replyWhileStopped: Any): BackoffOptions
 
   /**
-   * @see [[BackoffOnStopOptions.withFinalStopMessage()]]
+   * @see [[BackoffOnStopOptions.withFinalStopMessage]]
    */
   def withFinalStopMessage(isFinalStopMessage: Any => Boolean): BackoffOptions
 
@@ -635,5 +636,5 @@ private final case class BackoffOptionsImpl(
 }
 
 private sealed trait BackoffType
-private final case object StopImpliesFailure extends BackoffType
-private final case object RestartImpliesFailure extends BackoffType
+private case object StopImpliesFailure extends BackoffType
+private case object RestartImpliesFailure extends BackoffType

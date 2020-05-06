@@ -1,35 +1,33 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed.internal
 
 import java.util.concurrent.{ ConcurrentHashMap, CountDownLatch }
 
-import akka.annotation.InternalApi
-import akka.actor.typed.{ ActorSystem, Extension, ExtensionId, Extensions }
 import scala.annotation.tailrec
 import scala.util.{ Failure, Success, Try }
+
+import akka.actor.typed.{ ActorSystem, Extension, ExtensionId, Extensions }
+import akka.actor.typed.ExtensionSetup
+import akka.annotation.InternalApi
 import akka.util.ccompat.JavaConverters._
 
-import akka.actor.typed.ExtensionSetup
-
 /**
- * Actor system extensions registry
- *
  * INTERNAL API
+ *
+ * Actor system extensions registry
  */
 @InternalApi
-trait ExtensionsImpl extends Extensions { self: ActorSystem[_] =>
+private[akka] trait ExtensionsImpl extends Extensions { self: ActorSystem[_] =>
 
   private val extensions = new ConcurrentHashMap[ExtensionId[_], AnyRef]
 
   /**
-   * INTERNAL API
-   *
    * Hook for ActorSystem to load extensions on startup
    */
-  @InternalApi private[akka] def loadExtensions(): Unit = {
+  def loadExtensions(): Unit = {
 
     /*
      * @param throwOnLoadFail Throw exception when an extension fails to load (needed for backwards compatibility)

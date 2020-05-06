@@ -1,14 +1,17 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote.artery
 
 import java.net.InetAddress
 
-import akka.util.ccompat.JavaConverters._
-
 import scala.concurrent.duration._
+
+import com.github.ghik.silencer.silent
+import com.typesafe.config.Config
+import com.typesafe.config.ConfigFactory
+
 import akka.NotUsed
 import akka.japi.Util.immutableSeq
 import akka.stream.ActorMaterializerSettings
@@ -16,9 +19,7 @@ import akka.util.Helpers.ConfigOps
 import akka.util.Helpers.Requiring
 import akka.util.Helpers.toRootLowerCase
 import akka.util.WildcardIndex
-import com.github.ghik.silencer.silent
-import com.typesafe.config.Config
-import com.typesafe.config.ConfigFactory
+import akka.util.ccompat.JavaConverters._
 
 /** INTERNAL API */
 private[akka] final class ArterySettings private (config: Config) {
@@ -211,7 +212,8 @@ private[akka] final class ArterySettings private (config: Config) {
       val ImageLivenessTimeout: FiniteDuration = config
         .getMillisDuration("image-liveness-timeout")
         .requiring(interval => interval > Duration.Zero, "image-liveness-timeout must be more than zero")
-      require(ImageLivenessTimeout < HandshakeTimeout, "image-liveness-timeout must be less than handshake-timeout")
+      if (Transport == AeronUpd)
+        require(ImageLivenessTimeout < HandshakeTimeout, "image-liveness-timeout must be less than handshake-timeout")
       val DriverTimeout: FiniteDuration = config
         .getMillisDuration("driver-timeout")
         .requiring(interval => interval > Duration.Zero, "driver-timeout must be more than zero")
@@ -222,6 +224,12 @@ private[akka] final class ArterySettings private (config: Config) {
       val ConnectionTimeout: FiniteDuration = config
         .getMillisDuration("connection-timeout")
         .requiring(interval => interval > Duration.Zero, "connection-timeout must be more than zero")
+      val OutboundClientHostname: Option[String] = {
+        config.getString("outbound-client-hostname") match {
+          case ""       => None
+          case hostname => Some(hostname)
+        }
+      }
     }
 
   }

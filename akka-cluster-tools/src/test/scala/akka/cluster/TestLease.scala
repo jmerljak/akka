@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2019-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster
@@ -7,18 +7,21 @@ package akka.cluster
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
 
+import scala.concurrent.{ Future, Promise }
+
+import com.typesafe.config.ConfigFactory
+
 import akka.actor.{ ActorSystem, ExtendedActorSystem, Extension, ExtensionId, ExtensionIdProvider }
+import akka.actor.ClassicActorSystemProvider
 import akka.coordination.lease.LeaseSettings
 import akka.coordination.lease.scaladsl.Lease
 import akka.event.Logging
 import akka.testkit.TestProbe
-import com.typesafe.config.ConfigFactory
-
-import scala.concurrent.{ Future, Promise }
 import akka.util.ccompat.JavaConverters._
 
 object TestLeaseExt extends ExtensionId[TestLeaseExt] with ExtensionIdProvider {
   override def get(system: ActorSystem): TestLeaseExt = super.get(system)
+  override def get(system: ClassicActorSystemProvider): TestLeaseExt = super.get(system)
   override def lookup = TestLeaseExt
   override def createExtension(system: ExtendedActorSystem): TestLeaseExt = new TestLeaseExt(system)
 }
@@ -61,7 +64,7 @@ class TestLease(settings: LeaseSettings, system: ExtendedActorSystem) extends Le
 
   TestLeaseExt(system).setTestLease(settings.leaseName, this)
 
-  val initialPromise = Promise[Boolean]
+  val initialPromise = Promise[Boolean]()
 
   private val nextAcquireResult = new AtomicReference[Future[Boolean]](initialPromise.future)
   private val nextCheckLeaseResult = new AtomicReference[Boolean](false)

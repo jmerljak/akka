@@ -1,27 +1,29 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.persistence.typed.internal
 
-import akka.actor.PoisonPill
-import akka.actor.testkit.typed.scaladsl.TestProbe
-import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.scaladsl.adapter.{ TypedActorRefOps, TypedActorSystemOps }
-import akka.actor.typed.{ ActorRef, Behavior }
-import akka.persistence.Persistence
-import akka.persistence.RecoveryPermitter.{ RecoveryPermitGranted, RequestRecoveryPermit, ReturnRecoveryPermit }
-import akka.persistence.typed.scaladsl.EventSourcedBehavior.CommandHandler
-import akka.persistence.typed.scaladsl.{ Effect, EventSourcedBehavior }
 import scala.concurrent.duration._
 import scala.util.control.NoStackTrace
 
-import akka.actor.testkit.typed.scaladsl.LoggingEventFilter
-import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import org.scalatest.wordspec.AnyWordSpecLike
+
+import akka.actor.ActorSystem
+import akka.actor.PoisonPill
 import akka.actor.testkit.typed.scaladsl.LogCapturing
+import akka.actor.testkit.typed.scaladsl.LoggingTestKit
+import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import akka.actor.testkit.typed.scaladsl.TestProbe
+import akka.actor.typed.{ ActorRef, Behavior }
+import akka.actor.typed.scaladsl.Behaviors
+import akka.actor.typed.scaladsl.adapter.{ TypedActorRefOps, TypedActorSystemOps }
+import akka.persistence.Persistence
+import akka.persistence.RecoveryPermitter.{ RecoveryPermitGranted, RequestRecoveryPermit, ReturnRecoveryPermit }
 import akka.persistence.typed.PersistenceId
 import akka.persistence.typed.RecoveryCompleted
-import org.scalatest.WordSpecLike
+import akka.persistence.typed.scaladsl.{ Effect, EventSourcedBehavior }
+import akka.persistence.typed.scaladsl.EventSourcedBehavior.CommandHandler
 
 object RecoveryPermitterSpec {
 
@@ -47,7 +49,7 @@ object RecoveryPermitterSpec {
       eventProbe: TestProbe[Any],
       throwOnRecovery: Boolean = false): Behavior[Command] =
     EventSourcedBehavior[Command, Event, State](
-      persistenceId = PersistenceId(name),
+      persistenceId = PersistenceId.ofUniqueId(name),
       emptyState = EmptyState,
       commandHandler = CommandHandler.command {
         case StopActor => Effect.stop()
@@ -72,11 +74,11 @@ class RecoveryPermitterSpec extends ScalaTestWithActorTestKit(s"""
       akka.persistence.journal.plugin = "akka.persistence.journal.inmem"
       akka.persistence.journal.inmem.test-serialization = on
       akka.loggers = ["akka.testkit.TestEventListener"]
-      """) with WordSpecLike with LogCapturing {
+      """) with AnyWordSpecLike with LogCapturing {
 
   import RecoveryPermitterSpec._
 
-  implicit val classicSystem = system.toClassic
+  implicit val classicSystem: ActorSystem = system.toClassic
 
   private val permitter = Persistence(classicSystem).recoveryPermitter
 
@@ -189,7 +191,7 @@ class RecoveryPermitterSpec extends ScalaTestWithActorTestKit(s"""
 
       val stopProbe = createTestProbe[ActorRef[Command]]()
       val parent =
-        LoggingEventFilter.error("Exception during recovery.").intercept {
+        LoggingTestKit.error("Exception during recovery.").expect {
           spawn(Behaviors.setup[Command](ctx => {
             val persistentActor =
               ctx.spawnAnonymous(persistentBehavior("p3", p3, p3, throwOnRecovery = true))

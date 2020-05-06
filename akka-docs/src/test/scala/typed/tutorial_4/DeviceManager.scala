@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package typed.tutorial_4
@@ -41,7 +41,8 @@ object DeviceManager {
   //#device-manager-msgs
 }
 
-class DeviceManager(context: ActorContext[DeviceManager.Command]) extends AbstractBehavior[DeviceManager.Command] {
+class DeviceManager(context: ActorContext[DeviceManager.Command])
+    extends AbstractBehavior[DeviceManager.Command](context) {
   import DeviceManager._
 
   var groupIdToActor = Map.empty[String, ActorRef[DeviceGroup.Command]]

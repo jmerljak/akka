@@ -1,28 +1,32 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.persistence.fsm
 
-import akka.actor._
-import akka.annotation.InternalApi
-import akka.persistence.fsm.PersistentFSM.FSMState
-import akka.persistence.serialization.Message
-import akka.persistence.{ PersistentActor, RecoveryCompleted, SnapshotOffer }
-import akka.util.JavaDurationConverters
+import scala.annotation.varargs
+import scala.collection.immutable
+import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.duration._
+import scala.reflect.ClassTag
+
 import com.github.ghik.silencer.silent
 import com.typesafe.config.Config
 
-import scala.annotation.varargs
-import scala.collection.immutable
-import scala.concurrent.duration._
-import scala.reflect.ClassTag
+import akka.actor._
+import akka.annotation.InternalApi
+import akka.persistence.{ PersistentActor, RecoveryCompleted, SnapshotOffer }
+import akka.persistence.fsm.PersistentFSM.FSMState
+import akka.persistence.serialization.Message
+import akka.util.JavaDurationConverters
 
 /**
  * SnapshotAfter Extension Id and factory for creating SnapshotAfter extension
  */
 private[akka] object SnapshotAfter extends ExtensionId[SnapshotAfter] with ExtensionIdProvider {
   override def get(system: ActorSystem): SnapshotAfter = super.get(system)
+
+  override def get(system: ClassicActorSystemProvider): SnapshotAfter = super.get(system)
 
   override def lookup = SnapshotAfter
 
@@ -329,7 +333,7 @@ object PersistentFSM {
       extends NoSerializationVerificationNeeded {
     private var ref: Option[Cancellable] = _
     private val scheduler = context.system.scheduler
-    private implicit val executionContext = context.dispatcher
+    private implicit val executionContext: ExecutionContextExecutor = context.dispatcher
 
     def schedule(actor: ActorRef, timeout: FiniteDuration): Unit = {
       val timerMsg = msg match {
@@ -495,7 +499,7 @@ abstract class AbstractPersistentFSM[S <: FSMState, D, E]
   /**
    * Adapter from Java 8 Functional Interface to Scala Function
    * @param action - Java 8 lambda expression defining the action
-   * @return action represented as a Scala Functin
+   * @return action represented as a Scala Function
    */
   final def exec(action: Consumer[D]): D => Unit =
     data => action.accept(data)

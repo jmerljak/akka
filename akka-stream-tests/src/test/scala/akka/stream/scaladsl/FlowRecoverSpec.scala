@@ -1,15 +1,15 @@
 /*
- * Copyright (C) 2015-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2015-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.scaladsl
+
+import scala.util.control.NoStackTrace
 
 import akka.stream.testkit.StreamSpec
 import akka.stream.testkit.scaladsl.StreamTestKit._
 import akka.stream.testkit.scaladsl.TestSink
 import akka.testkit.EventFilter
-
-import scala.util.control.NoStackTrace
 
 class FlowRecoverSpec extends StreamSpec("""
     akka.stream.materializer.initial-input-buffer-size = 1

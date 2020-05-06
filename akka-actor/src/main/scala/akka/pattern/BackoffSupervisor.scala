@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2015-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.pattern
@@ -7,12 +7,13 @@ package akka.pattern
 import java.util.Optional
 import java.util.concurrent.ThreadLocalRandom
 
-import akka.actor.{ ActorRef, DeadLetterSuppression, OneForOneStrategy, Props, SupervisorStrategy }
-import akka.pattern.internal.BackoffOnStopSupervisor
-import akka.util.JavaDurationConverters._
-
 import scala.concurrent.duration.{ Duration, FiniteDuration }
 import scala.util.Try
+
+import akka.actor.{ ActorRef, DeadLetterSuppression, OneForOneStrategy, Props, SupervisorStrategy }
+import akka.annotation.InternalApi
+import akka.pattern.internal.BackoffOnStopSupervisor
+import akka.util.JavaDurationConverters._
 
 object BackoffSupervisor {
 
@@ -245,7 +246,7 @@ object BackoffSupervisor {
    * Send this message to the `BackoffSupervisor` and it will reply with
    * [[BackoffSupervisor.CurrentChild]] containing the `ActorRef` of the current child, if any.
    */
-  final case object GetCurrentChild
+  case object GetCurrentChild
 
   /**
    * Java API: Send this message to the `BackoffSupervisor` and it will reply with
@@ -269,7 +270,7 @@ object BackoffSupervisor {
    * Send this message to the `BackoffSupervisor` and it will reset the back-off.
    * This should be used in conjunction with `withManualReset` in [[BackoffOptions]].
    */
-  final case object Reset
+  case object Reset
 
   /**
    * Java API: Send this message to the `BackoffSupervisor` and it will reset the back-off.
@@ -281,7 +282,7 @@ object BackoffSupervisor {
    * Send this message to the `BackoffSupervisor` and it will reply with
    * [[BackoffSupervisor.RestartCount]] containing the current restart count.
    */
-  final case object GetRestartCount
+  case object GetRestartCount
 
   /**
    * Java API: Send this message to the `BackoffSupervisor` and it will reply with
@@ -291,10 +292,16 @@ object BackoffSupervisor {
 
   final case class RestartCount(count: Int)
 
-  // not final for binary compatibility with 2.4.1
+  /**
+   * INTERNAL API
+   */
+  @InternalApi
   private[akka] case object StartChild extends DeadLetterSuppression
 
-  // not final for binary compatibility with 2.4.1
+  /**
+   * INTERNAL API
+   */
+  @InternalApi
   private[akka] case class ResetRestartCount(current: Int) extends DeadLetterSuppression
 
   /**

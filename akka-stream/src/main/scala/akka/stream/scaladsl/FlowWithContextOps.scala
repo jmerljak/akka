@@ -1,18 +1,18 @@
 /*
- * Copyright (C) 2014-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2014-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.scaladsl
 
+import scala.annotation.unchecked.uncheckedVariance
 import scala.collection.immutable
 import scala.concurrent.Future
-import scala.language.higherKinds
-import scala.annotation.unchecked.uncheckedVariance
+
 import akka.NotUsed
 import akka.dispatch.ExecutionContexts
+import akka.event.{ LogMarker, LoggingAdapter, MarkerLoggingAdapter }
 import akka.stream._
 import akka.util.ConstantFun
-import akka.event.LoggingAdapter
 
 /**
  * Shared stream operations for [[FlowWithContext]] and [[SourceWithContext]] that automatically propagate a context
@@ -60,13 +60,21 @@ trait FlowWithContextOps[+Out, +Ctx, +Mat] {
     via(flow.map { case (e, ctx) => (f(e), ctx) })
 
   /**
+   * Context-preserving variant of [[akka.stream.scaladsl.FlowOps.mapError]].
+   *
+   * @see [[akka.stream.scaladsl.FlowOps.mapError]]
+   */
+  def mapError(pf: PartialFunction[Throwable, Throwable]): Repr[Out, Ctx] =
+    via(flow.mapError(pf))
+
+  /**
    * Context-preserving variant of [[akka.stream.scaladsl.FlowOps.mapAsync]].
    *
    * @see [[akka.stream.scaladsl.FlowOps.mapAsync]]
    */
   def mapAsync[Out2](parallelism: Int)(f: Out => Future[Out2]): Repr[Out2, Ctx] =
     via(flow.mapAsync(parallelism) {
-      case (e, ctx) => f(e).map(o => (o, ctx))(ExecutionContexts.sameThreadExecutionContext)
+      case (e, ctx) => f(e).map(o => (o, ctx))(ExecutionContexts.parasitic)
     })
 
   /**
@@ -175,6 +183,20 @@ trait FlowWithContextOps[+Out, +Ctx, +Mat] {
       implicit log: LoggingAdapter = null): Repr[Out, Ctx] = {
     val extractWithContext: ((Out, Ctx)) => Any = { case (e, _) => extract(e) }
     via(flow.log(name, extractWithContext)(log))
+  }
+
+  /**
+   * Context-preserving variant of [[akka.stream.scaladsl.FlowOps.logWithMarker]].
+   *
+   * @see [[akka.stream.scaladsl.FlowOps.logWithMarker]]
+   */
+  def logWithMarker(
+      name: String,
+      marker: (Out, Ctx) => LogMarker,
+      extract: Out => Any = ConstantFun.scalaIdentityFunction)(
+      implicit log: MarkerLoggingAdapter = null): Repr[Out, Ctx] = {
+    val extractWithContext: ((Out, Ctx)) => Any = { case (e, _) => extract(e) }
+    via(flow.logWithMarker(name, marker.tupled, extractWithContext)(log))
   }
 
   private[akka] def flow[T, C]: Flow[(T, C), (T, C), NotUsed] = Flow[(T, C)]

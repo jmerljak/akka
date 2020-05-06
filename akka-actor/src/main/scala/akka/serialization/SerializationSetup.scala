@@ -1,13 +1,13 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.serialization
 
+import scala.collection.immutable
+
 import akka.actor.ExtendedActorSystem
 import akka.actor.setup.Setup
-
-import scala.collection.immutable
 import akka.util.ccompat.JavaConverters._
 
 object SerializationSetup {
@@ -31,7 +31,7 @@ object SerializationSetup {
 }
 
 /**
- * Setup for the serialization subsystem, constructor is *Internal API*, use factories in [[SerializationSetup()]]
+ * Setup for the serialization subsystem, constructor is *Internal API*, use factories in [[SerializationSetup]]
  */
 final class SerializationSetup private (val createSerializers: ExtendedActorSystem => immutable.Seq[SerializerDetails])
     extends Setup

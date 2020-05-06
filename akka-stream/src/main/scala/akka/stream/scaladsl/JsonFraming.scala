@@ -1,8 +1,10 @@
 /*
- * Copyright (C) 2015-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2015-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.scaladsl
+
+import scala.util.control.NonFatal
 
 import akka.NotUsed
 import akka.stream.Attributes
@@ -10,8 +12,6 @@ import akka.stream.impl.JsonObjectParser
 import akka.stream.impl.fusing.GraphStages.SimpleLinearGraphStage
 import akka.stream.stage.{ GraphStageLogic, InHandler, OutHandler }
 import akka.util.ByteString
-
-import scala.util.control.NonFatal
 
 /** Provides JSON framing operators that can separate valid JSON objects from incoming [[ByteString]] objects. */
 object JsonFraming {

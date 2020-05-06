@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster.sharding
@@ -12,10 +12,10 @@ import scala.collection.immutable
 import scala.concurrent.Await
 import scala.util.control.NonFatal
 
-import akka.util.ccompat.JavaConverters._
 import akka.actor.Actor
 import akka.actor.ActorRef
 import akka.actor.ActorSystem
+import akka.actor.ClassicActorSystemProvider
 import akka.actor.Deploy
 import akka.actor.ExtendedActorSystem
 import akka.actor.Extension
@@ -36,6 +36,7 @@ import akka.event.Logging
 import akka.pattern.BackoffOpts
 import akka.pattern.ask
 import akka.util.ByteString
+import akka.util.ccompat.JavaConverters._
 
 /**
  * This extension provides sharding functionality of actors in a cluster.
@@ -153,6 +154,7 @@ import akka.util.ByteString
 object ClusterSharding extends ExtensionId[ClusterSharding] with ExtensionIdProvider {
 
   override def get(system: ActorSystem): ClusterSharding = super.get(system)
+  override def get(system: ClassicActorSystemProvider): ClusterSharding = super.get(system)
 
   override def lookup = ClusterSharding
 
@@ -180,7 +182,7 @@ class ClusterSharding(system: ExtendedActorSystem) extends Extension {
     val guardianName: String =
       system.settings.config.getString("akka.cluster.sharding.guardian-name")
     val dispatcher = system.settings.config.getString("akka.cluster.sharding.use-dispatcher")
-    system.systemActorOf(Props[ClusterShardingGuardian].withDispatcher(dispatcher), guardianName)
+    system.systemActorOf(Props[ClusterShardingGuardian]().withDispatcher(dispatcher), guardianName)
   }
 
   /**
@@ -626,7 +628,7 @@ class ClusterSharding(system: ExtendedActorSystem) extends Extension {
       case null =>
         proxies.get(proxyName(typeName, None)) match {
           case null =>
-            throw new IllegalArgumentException(s"Shard type [$typeName] must be started first")
+            throw new IllegalStateException(s"Shard type [$typeName] must be started first")
           case ref => ref
         }
       case ref => ref
@@ -643,7 +645,7 @@ class ClusterSharding(system: ExtendedActorSystem) extends Extension {
   def shardRegionProxy(typeName: String, dataCenter: DataCenter): ActorRef = {
     proxies.get(proxyName(typeName, Some(dataCenter))) match {
       case null =>
-        throw new IllegalArgumentException(s"Shard type [$typeName] must be started first")
+        throw new IllegalStateException(s"Shard type [$typeName] must be started first")
       case ref => ref
     }
   }
@@ -694,8 +696,6 @@ private[akka] class ClusterShardingGuardian extends Actor {
   val sharding = ClusterSharding(context.system)
 
   val majorityMinCap = context.system.settings.config.getInt("akka.cluster.sharding.distributed-data.majority-min-cap")
-  private lazy val replicatorSettings =
-    ReplicatorSettings(context.system.settings.config.getConfig("akka.cluster.sharding.distributed-data"))
   private var replicatorByRole = Map.empty[Option[String], ActorRef]
 
   private def coordinatorSingletonManagerName(encName: String): String =
@@ -703,6 +703,18 @@ private[akka] class ClusterShardingGuardian extends Actor {
 
   private def coordinatorPath(encName: String): String =
     (self.path / coordinatorSingletonManagerName(encName) / "singleton" / "coordinator").toStringWithoutAddress
+
+  private def replicatorSettings(shardingSettings: ClusterShardingSettings) = {
+    val configuredSettings =
+      ReplicatorSettings(context.system.settings.config.getConfig("akka.cluster.sharding.distributed-data"))
+    // Use members within the data center and with the given role (if any)
+    val replicatorRoles = Set(ClusterSettings.DcRolePrefix + cluster.settings.SelfDataCenter) ++ shardingSettings.role
+    val settingsWithRoles = configuredSettings.withRoles(replicatorRoles)
+    if (shardingSettings.rememberEntities)
+      settingsWithRoles
+    else
+      settingsWithRoles.withDurableKeys(Set.empty[String])
+  }
 
   private def replicator(settings: ClusterShardingSettings): ActorRef = {
     if (settings.stateStoreMode == ClusterShardingSettings.StateStoreModeDData) {
@@ -714,9 +726,7 @@ private[akka] class ClusterShardingGuardian extends Actor {
             case Some(r) => URLEncoder.encode(r, ByteString.UTF_8) + "Replicator"
             case None    => "replicator"
           }
-          // Use members within the data center and with the given role (if any)
-          val replicatorRoles = Set(ClusterSettings.DcRolePrefix + cluster.settings.SelfDataCenter) ++ settings.role
-          val ref = context.actorOf(Replicator.props(replicatorSettings.withRoles(replicatorRoles)), name)
+          val ref = context.actorOf(Replicator.props(replicatorSettings(settings)), name)
           replicatorByRole = replicatorByRole.updated(settings.role, ref)
           ref
       }
@@ -756,12 +766,13 @@ private[akka] class ClusterShardingGuardian extends Actor {
                   minBackoff = coordinatorFailureBackoff,
                   maxBackoff = coordinatorFailureBackoff * 5,
                   randomFactor = 0.2)
+                .withFinalStopMessage(_ == ShardCoordinator.Internal.Terminate)
                 .props
                 .withDeploy(Deploy.local)
             val singletonSettings = settings.coordinatorSingletonSettings.withSingletonName("singleton").withRole(role)
             context.actorOf(
               ClusterSingletonManager
-                .props(singletonProps, terminationMessage = PoisonPill, singletonSettings)
+                .props(singletonProps, terminationMessage = ShardCoordinator.Internal.Terminate, singletonSettings)
                 .withDispatcher(context.props.dispatcher),
               name = cName)
           }

@@ -1,22 +1,22 @@
 /*
- * Copyright (C) 2014-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2014-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.javadsl
 
 import java.util.concurrent.CompletionStage
 
+import scala.annotation.unchecked.uncheckedVariance
+import scala.compat.java8.FutureConverters._
+
 import akka.actor.ClassicActorSystemProvider
-import akka.event.LoggingAdapter
+import akka.event.{ LogMarker, LoggingAdapter, MarkerLoggingAdapter }
 import akka.japi.Pair
 import akka.japi.Util
 import akka.japi.function
 import akka.stream._
 import akka.util.ConstantFun
 import akka.util.ccompat.JavaConverters._
-
-import scala.annotation.unchecked.uncheckedVariance
-import scala.compat.java8.FutureConverters._
 
 object SourceWithContext {
 
@@ -34,7 +34,7 @@ object SourceWithContext {
  * use [[SourceWithContext#via]] to manually provide the context propagation for otherwise unsupported
  * operations.
  *
- * Can be created by calling [[Source.asSourceWithContext()]]
+ * Can be created by calling [[Source.asSourceWithContext]]
  */
 final class SourceWithContext[+Out, +Ctx, +Mat](delegate: scaladsl.SourceWithContext[Out, Ctx, Mat])
     extends GraphDelegate(delegate) {
@@ -60,6 +60,14 @@ final class SourceWithContext[+Out, +Ctx, +Mat](delegate: scaladsl.SourceWithCon
    */
   override def withAttributes(attr: Attributes): SourceWithContext[Out, Ctx, Mat] =
     viaScala(_.withAttributes(attr))
+
+  /**
+   * Context-preserving variant of [[akka.stream.javadsl.Source.mapError]].
+   *
+   * @see [[akka.stream.javadsl.Source.mapError]]
+   */
+  def mapError(pf: PartialFunction[Throwable, Throwable]): SourceWithContext[Out, Ctx, Mat] =
+    viaScala(_.mapError(pf))
 
   /**
    * Context-preserving variant of [[akka.stream.javadsl.Source.mapMaterializedValue]].
@@ -211,6 +219,48 @@ final class SourceWithContext[+Out, +Ctx, +Mat](delegate: scaladsl.SourceWithCon
    */
   def log(name: String): SourceWithContext[Out, Ctx, Mat] =
     this.log(name, ConstantFun.javaIdentityFunction[Out], null)
+
+  /**
+   * Context-preserving variant of [[akka.stream.javadsl.Source.logWithMarker]].
+   *
+   * @see [[akka.stream.javadsl.Source.logWithMarker]]
+   */
+  def logWithMarker(
+      name: String,
+      marker: function.Function2[Out, Ctx, LogMarker],
+      extract: function.Function[Out, Any],
+      log: MarkerLoggingAdapter): SourceWithContext[Out, Ctx, Mat] =
+    viaScala(_.logWithMarker(name, (e, c) => marker.apply(e, c), e => extract.apply(e))(log))
+
+  /**
+   * Context-preserving variant of [[akka.stream.javadsl.Flow.logWithMarker]].,
+   *
+   * @see [[akka.stream.javadsl.Flow.logWithMarker]]
+   */
+  def logWithMarker(
+      name: String,
+      marker: function.Function2[Out, Ctx, LogMarker],
+      extract: function.Function[Out, Any]): SourceWithContext[Out, Ctx, Mat] =
+    this.logWithMarker(name, marker, extract, null)
+
+  /**
+   * Context-preserving variant of [[akka.stream.javadsl.Flow.logWithMarker]].
+   *
+   * @see [[akka.stream.javadsl.Flow.logWithMarker]]
+   */
+  def logWithMarker(
+      name: String,
+      marker: function.Function2[Out, Ctx, LogMarker],
+      log: MarkerLoggingAdapter): SourceWithContext[Out, Ctx, Mat] =
+    this.logWithMarker(name, marker, ConstantFun.javaIdentityFunction[Out], log)
+
+  /**
+   * Context-preserving variant of [[akka.stream.javadsl.Flow.logWithMarker]].
+   *
+   * @see [[akka.stream.javadsl.Flow.logWithMarker]]
+   */
+  def logWithMarker(name: String, marker: function.Function2[Out, Ctx, LogMarker]): SourceWithContext[Out, Ctx, Mat] =
+    this.logWithMarker(name, marker, ConstantFun.javaIdentityFunction[Out], null)
 
   /**
    * Connect this [[akka.stream.javadsl.SourceWithContext]] to a [[akka.stream.javadsl.Sink]],

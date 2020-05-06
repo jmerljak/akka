@@ -1,13 +1,13 @@
 /*
- * Copyright (C) 2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2019-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.impl
 
 import akka.actor.{ ActorRef, Terminated }
 import akka.annotation.InternalApi
-import akka.stream.impl.Stages.DefaultAttributes
 import akka.stream.{ AbruptStageTerminationException, Attributes, Inlet, SinkShape }
+import akka.stream.impl.Stages.DefaultAttributes
 import akka.stream.stage.{ GraphStage, GraphStageLogic, InHandler, StageLogging }
 
 /**
@@ -28,6 +28,8 @@ final private[akka] class ActorRefSinkStage[T](
 
   override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
     new GraphStageLogic(shape) with InHandler with StageLogging {
+
+      override protected def logSource: Class[_] = classOf[ActorRefSinkStage[_]]
 
       var completionSignalled = false
 

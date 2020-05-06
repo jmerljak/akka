@@ -1,8 +1,10 @@
 /*
- * Copyright (C) 2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2019-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.persistence.query.journal.leveldb
+
+import scala.concurrent.duration.FiniteDuration
 
 import akka.NotUsed
 import akka.actor.ActorRef
@@ -25,8 +27,6 @@ import akka.stream.stage.GraphStage
 import akka.stream.stage.GraphStageLogic
 import akka.stream.stage.OutHandler
 import akka.stream.stage.TimerGraphStageLogicWithLogging
-
-import scala.concurrent.duration.FiniteDuration
 
 /**
  * INTERNAL API
@@ -68,6 +68,8 @@ final private[akka] class EventsByPersistenceIdStage(
       var nextSequenceNr = fromSequenceNr
       var toSequenceNr = initialToSequenceNr
 
+      override protected def logSource: Class[_] = classOf[EventsByPersistenceIdStage]
+
       override def preStart(): Unit = {
         stageActorRef = getStageActor(journalInteraction).ref
         refreshInterval.foreach(fd => {
@@ -106,7 +108,8 @@ final private[akka] class EventsByPersistenceIdStage(
                 offset = Sequence(pr.sequenceNr),
                 persistenceId = pr.persistenceId,
                 sequenceNr = pr.sequenceNr,
-                event = pr.payload))
+                event = pr.payload,
+                timestamp = pr.timestamp))
             nextSequenceNr = pr.sequenceNr + 1
             deliverBuf(out)
 
@@ -117,13 +120,14 @@ final private[akka] class EventsByPersistenceIdStage(
             if (highestSeqNr < toSequenceNr && isCurrentQuery()) {
               toSequenceNr = highestSeqNr
             }
+
             log.debug(
               "Replay complete. From sequenceNr {} currentSequenceNr {} toSequenceNr {} buffer size {}",
               fromSequenceNr,
               nextSequenceNr,
               toSequenceNr,
               bufferSize)
-            if (bufferEmpty && (nextSequenceNr > toSequenceNr || nextSequenceNr == fromSequenceNr)) {
+            if (bufferEmpty && (nextSequenceNr > toSequenceNr || (nextSequenceNr == fromSequenceNr && isCurrentQuery()))) {
               completeStage()
             } else if (nextSequenceNr < toSequenceNr) {
               // need further requests to the journal

@@ -1,7 +1,7 @@
 # Classic FSM
 
 @@include[includes.md](includes.md) { #actor-api }
-For the new API see @ref[fsm](typed/fsm.md).
+For the documentation of the new API of this feature and for new projects see @ref:[fsm](typed/fsm.md).
 
 ## Dependency
 
@@ -12,13 +12,6 @@ To use Finite State Machine actors, you must add the following dependency in you
   artifact="akka-actor_$scala.binary_version$"
   version="$akka.version$"
 }
-
-## Sample project
-
-You can look at the
-@java[@extref[FSM example project](samples:akka-samples-fsm-java)]
-@scala[@extref[FSM example project](samples:akka-samples-fsm-scala)]
-to see what this looks like in practice.
 
 ## Overview
 
@@ -288,7 +281,7 @@ Within this handler the state of the FSM may be queried using the
 ### Initiating Transitions
 
 The result of any `stateFunction` must be a definition of the next state
-unless terminating the FSM, which is described in [Termination from Inside](#termination-from-inside).
+unless terminating the FSM, which is described in @ref:[Termination from Inside](#termination-from-inside).
 The state definition can either be the current state, as described by the
 `stay` directive, or it is a different state as given by
 `goto(state)`. The resulting object allows further qualification by way
@@ -307,7 +300,7 @@ use `Duration.Inf`.
  * 
    `using(data)`
    This modifier replaces the old state data with the new data given. If you
-follow the advice [above](#fsm-philosophy), this is the only place where
+follow the advice @ref:[above](#defining-states), this is the only place where
 internal state data are ever modified.
  * 
    `replying(msg)`
@@ -591,10 +584,3 @@ by `logDepth` after the buffer has been allocated.
 The contents of the event log are available using method `getLog`, which
 returns an `IndexedSeq[LogEntry]` where the oldest entry is at index
 zero.
-
-## Examples
-
-A bigger FSM example contrasted with Actor's `become`/`unbecome` can be
-downloaded as a ready to run @scala[@extref[Akka FSM sample](ecs:akka-samples-fsm-scala)]@java[@extref[Akka FSM sample](ecs:akka-samples-fsm-java)]
-together with a tutorial. The source code of this sample can be found in the
-@scala[@extref[Akka Samples Repository](samples:akka-sample-fsm-scala)]@java[@extref[Akka Samples Repository](samples:akka-sample-fsm-java)].

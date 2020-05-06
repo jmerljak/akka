@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2014-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed.scaladsl
@@ -7,16 +7,19 @@ package akka.actor.typed.scaladsl
 import java.util.concurrent.TimeoutException
 
 import scala.concurrent.Future
+
+import com.github.ghik.silencer.silent
+
 import akka.actor.{ Address, RootActorPath }
 import akka.actor.typed.ActorRef
+import akka.actor.typed.ActorSystem
+import akka.actor.typed.RecipientRef
 import akka.actor.typed.Scheduler
 import akka.actor.typed.internal.{ adapter => adapt }
-import akka.annotation.InternalApi
-import akka.pattern.PromiseActorRef
-import akka.util.Timeout
-import akka.actor.typed.RecipientRef
 import akka.actor.typed.internal.InternalRecipientRef
-import com.github.ghik.silencer.silent
+import akka.annotation.{ InternalApi, InternalStableApi }
+import akka.pattern.PromiseActorRef
+import akka.util.{ unused, Timeout }
 
 /**
  * The ask-pattern implements the initiator side of a request–reply protocol.
@@ -24,6 +27,12 @@ import com.github.ghik.silencer.silent
  * See [[AskPattern.Askable.ask]] for details
  */
 object AskPattern {
+
+  /**
+   * Provides a scheduler from an actor system (that will likely already be implicit in the scope) to minimize ask
+   * boilerplate.
+   */
+  implicit def schedulerFromActorSystem(implicit system: ActorSystem[_]): Scheduler = system.scheduler
 
   /**
    * See [[ask]]
@@ -53,7 +62,7 @@ object AskPattern {
      * case class Request(msg: String, replyTo: ActorRef[Reply])
      * case class Reply(msg: String)
      *
-     * implicit val scheduler = system.scheduler
+     * implicit val system = ...
      * implicit val timeout = Timeout(3.seconds)
      * val target: ActorRef[Request] = ...
      * val f: Future[Reply] = target ? (replyTo => Request("hello", replyTo))
@@ -86,7 +95,7 @@ object AskPattern {
      * case class Request(msg: String, replyTo: ActorRef[Reply])
      * case class Reply(msg: String)
      *
-     * implicit val scheduler = system.scheduler
+     * implicit val system = ...
      * implicit val timeout = Timeout(3.seconds)
      * val target: ActorRef[Request] = ...
      * val f: Future[Reply] = target.ask(replyTo => Request("hello", replyTo))
@@ -137,14 +146,19 @@ object AskPattern {
     val ref: ActorRef[U] = _ref
     val future: Future[U] = _future
     val promiseRef: PromiseActorRef = _promiseRef
+
+    @InternalStableApi
+    private[akka] def ask[T](target: InternalRecipientRef[T], message: T, @unused timeout: Timeout): Future[U] = {
+      target ! message
+      future
+    }
   }
 
   private def askClassic[T, U](target: InternalRecipientRef[T], timeout: Timeout, f: ActorRef[U] => T): Future[U] = {
     val p = new PromiseRef[U](target, timeout)
     val m = f(p.ref)
     if (p.promiseRef ne null) p.promiseRef.messageClassName = m.getClass.getName
-    target ! m
-    p.future
+    p.ask(target, m, timeout)
   }
 
   /**

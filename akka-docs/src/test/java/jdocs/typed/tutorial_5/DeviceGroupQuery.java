@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package jdocs.typed.tutorial_5;
@@ -74,10 +74,11 @@ public class DeviceGroupQuery extends AbstractBehavior<DeviceGroupQuery.Command>
       Duration timeout,
       ActorContext<Command> context,
       TimerScheduler<Command> timers) {
+    super(context);
     this.requestId = requestId;
     this.requester = requester;
 
-    timers.startSingleTimer(CollectionTimeout.class, CollectionTimeout.INSTANCE, timeout);
+    timers.startSingleTimer(CollectionTimeout.INSTANCE, timeout);
 
     ActorRef<Device.RespondTemperature> respondTemperatureAdapter =
         context.messageAdapter(Device.RespondTemperature.class, WrappedRespondTemperature::new);

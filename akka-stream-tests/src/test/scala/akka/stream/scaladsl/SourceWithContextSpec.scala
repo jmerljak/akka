@@ -1,8 +1,10 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.scaladsl
+
+import scala.util.control.NoStackTrace
 
 import akka.stream.testkit.StreamSpec
 import akka.stream.testkit.scaladsl.TestSink
@@ -18,7 +20,7 @@ class SourceWithContextSpec extends StreamSpec {
       Source(Vector(msg))
         .asSourceWithContext(_.offset)
         .toMat(TestSink.probe[(Message, Long)])(Keep.right)
-        .run
+        .run()
         .request(1)
         .expectNext((msg, 1L))
         .expectComplete()
@@ -55,7 +57,7 @@ class SourceWithContextSpec extends StreamSpec {
         .filter(_ != "b")
         .filterNot(_ == "d")
         .toMat(TestSink.probe[(String, Long)])(Keep.right)
-        .run
+        .run()
         .request(2)
         .expectNext(("a", 1L))
         .expectNext(("c", 4L))
@@ -98,13 +100,13 @@ class SourceWithContextSpec extends StreamSpec {
         }
         .grouped(2)
         .toMat(TestSink.probe[(Seq[String], Seq[Long])])(Keep.right)
-        .run
+        .run()
         .request(2)
         .expectNext((Seq("a-1", "a-2"), Seq(1L, 1L)), (Seq("a-3", "a-4"), Seq(1L, 1L)))
         .expectComplete()
     }
 
-    "be able to change meterialized value via mapMaterializedValue" in {
+    "be able to change materialized value via mapMaterializedValue" in {
       val materializedValue = "MatedValue"
       Source
         .empty[Message]
@@ -112,6 +114,26 @@ class SourceWithContextSpec extends StreamSpec {
         .mapMaterializedValue(_ => materializedValue)
         .to(Sink.ignore)
         .run() shouldBe materializedValue
+    }
+
+    "be able to map error via mapError" in {
+      val ex = new RuntimeException("ex") with NoStackTrace
+      val boom = new Exception("BOOM!") with NoStackTrace
+
+      Source(1L to 4L)
+        .map { offset =>
+          Message("a", offset)
+        }
+        .map {
+          case m @ Message(_, offset) => if (offset == 3) throw ex else m
+        }
+        .asSourceWithContext(_.offset)
+        .mapError { case _: Throwable => boom }
+        .runWith(TestSink.probe[(Message, Long)])
+        .request(3)
+        .expectNext((Message("a", 1L), 1L))
+        .expectNext((Message("a", 2L), 2L))
+        .expectError(boom)
     }
   }
 }

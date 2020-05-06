@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote.testkit
@@ -18,6 +18,7 @@ import java.io.OutputStreamWriter
 import java.io.PrintWriter
 import java.io.StringReader
 import java.io.StringWriter
+
 import scala.annotation.tailrec
 
 /**

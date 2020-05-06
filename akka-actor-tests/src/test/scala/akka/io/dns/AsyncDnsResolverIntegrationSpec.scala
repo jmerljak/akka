@@ -1,21 +1,22 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.io.dns
 
 import java.net.InetAddress
 
-import akka.io.dns.DnsProtocol.{ Ip, RequestType, Srv }
-import akka.io.{ Dns, IO }
+import scala.concurrent.duration._
+
 import CachePolicy.Ttl
+
+import akka.io.{ Dns, IO }
+import akka.io.dns.DnsProtocol.{ Ip, RequestType, Srv }
 import akka.pattern.ask
+import akka.testkit.{ AkkaSpec, SocketUtil }
 import akka.testkit.SocketUtil.Both
 import akka.testkit.WithLogCapturing
-import akka.testkit.{ AkkaSpec, SocketUtil }
 import akka.util.Timeout
-
-import scala.concurrent.duration._
 
 /*
 These tests rely on a DNS server with 2 zones configured, foo.test and bar.example.
@@ -31,10 +32,9 @@ class AsyncDnsResolverIntegrationSpec extends AkkaSpec(s"""
     akka.io.dns.async-dns.nameservers = ["localhost:${AsyncDnsResolverIntegrationSpec.dockerDnsServerPort}"]
     akka.io.dns.async-dns.search-domains = ["foo.test", "test"]
     akka.io.dns.async-dns.ndots = 2
-//    akka.io.dns.async-dns.nameservers = default
   """) with DockerBindDnsService with WithLogCapturing {
   val duration = 10.seconds
-  implicit val timeout = Timeout(duration)
+  implicit val timeout: Timeout = Timeout(duration)
 
   val hostPort = AsyncDnsResolverIntegrationSpec.dockerDnsServerPort
 
@@ -182,7 +182,13 @@ class AsyncDnsResolverIntegrationSpec extends AkkaSpec(s"""
     }
 
     def resolve(name: String, requestType: RequestType = Ip()): DnsProtocol.Resolved = {
-      (IO(Dns) ? DnsProtocol.Resolve(name, requestType)).mapTo[DnsProtocol.Resolved].futureValue
+      try {
+        (IO(Dns) ? DnsProtocol.Resolve(name, requestType)).mapTo[DnsProtocol.Resolved].futureValue
+      } catch {
+        case e: Throwable =>
+          dumpNameserverLogs()
+          throw e
+      }
     }
 
   }

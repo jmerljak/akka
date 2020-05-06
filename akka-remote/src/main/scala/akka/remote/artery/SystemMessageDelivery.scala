@@ -1,10 +1,9 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote.artery
 
-import akka.util.PrettyDuration.PrettyPrintableDuration
 import java.util.ArrayDeque
 
 import scala.annotation.tailrec
@@ -12,10 +11,17 @@ import scala.concurrent.duration._
 import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
+import scala.util.control.NoStackTrace
 
 import akka.Done
+import akka.actor.ActorRef
+import akka.annotation.InternalApi
+import akka.dispatch.ExecutionContexts
+import akka.dispatch.sysmsg.SystemMessage
+import akka.event.Logging
 import akka.remote.UniqueAddress
 import akka.remote.artery.InboundControlJunction.ControlMessageObserver
+import akka.remote.artery.OutboundHandshake.HandshakeReq
 import akka.stream.Attributes
 import akka.stream.FlowShape
 import akka.stream.Inlet
@@ -24,16 +30,10 @@ import akka.stream.stage.GraphStage
 import akka.stream.stage.GraphStageLogic
 import akka.stream.stage.InHandler
 import akka.stream.stage.OutHandler
-import akka.stream.stage.TimerGraphStageLogic
-import akka.remote.artery.OutboundHandshake.HandshakeReq
-import akka.actor.ActorRef
-import akka.dispatch.sysmsg.SystemMessage
-import scala.util.control.NoStackTrace
-
-import akka.annotation.InternalApi
-import akka.event.Logging
 import akka.stream.stage.StageLogging
+import akka.stream.stage.TimerGraphStageLogic
 import akka.util.OptionVal
+import akka.util.PrettyDuration.PrettyPrintableDuration
 
 /**
  * INTERNAL API
@@ -99,19 +99,17 @@ import akka.util.OptionVal
       private def localAddress = outboundContext.localAddress
       private def remoteAddress = outboundContext.remoteAddress
       private def remoteAddressLogParam: String =
-        outboundContext.associationState.uniqueRemoteAddressValue().getOrElse(remoteAddress).toString
+        outboundContext.associationState.uniqueRemoteAddress().getOrElse(remoteAddress).toString
 
       override protected def logSource: Class[_] = classOf[SystemMessageDelivery]
 
       override def preStart(): Unit = {
-        implicit val ec = materializer.executionContext
-        outboundContext.controlSubject.attach(this).foreach {
-          getAsyncCallback[Done] { _ =>
-            replyObserverAttached = true
-            if (isAvailable(out))
-              pull(in) // onPull from downstream already called
-          }.invoke
+        val callback = getAsyncCallback[Done] { _ =>
+          replyObserverAttached = true
+          if (isAvailable(out))
+            pull(in) // onPull from downstream already called
         }
+        outboundContext.controlSubject.attach(this).foreach(callback.invoke)(ExecutionContexts.parasitic)
       }
 
       override def postStop(): Unit = {
@@ -151,7 +149,7 @@ import akka.util.OptionVal
         }
       }
 
-      // ControlMessageObserver, external call
+      // ControlMessageObserver, external call but on graph logic machinery thread (getAsyncCallback safe)
       override def controlSubjectCompleted(signal: Try[Done]): Unit = {
         getAsyncCallback[Try[Done]] {
           case Success(_)     => completeStage()
@@ -324,8 +322,8 @@ import akka.util.OptionVal
  */
 @InternalApi private[remote] class SystemMessageAcker(inboundContext: InboundContext)
     extends GraphStage[FlowShape[InboundEnvelope, InboundEnvelope]] {
-  import SystemMessageDelivery._
   import SystemMessageAcker._
+  import SystemMessageDelivery._
 
   val in: Inlet[InboundEnvelope] = Inlet("SystemMessageAcker.in")
   val out: Outlet[InboundEnvelope] = Outlet("SystemMessageAcker.out")

@@ -1,8 +1,10 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.snapshot
+
+import scala.concurrent.Promise
 
 import akka.stream.FlowShape
 import akka.stream.Materializer
@@ -15,8 +17,6 @@ import akka.stream.scaladsl.Sink
 import akka.stream.scaladsl.Source
 import akka.stream.testkit.StreamSpec
 import akka.stream.testkit.scaladsl.TestSink
-
-import scala.concurrent.Promise
 
 class MaterializerStateSpec extends StreamSpec {
 
@@ -41,7 +41,7 @@ class MaterializerStateSpec extends StreamSpec {
 
     "snapshot a running stream on the default dispatcher" in {
       val promise = Promise[Int]()
-      Source.fromFuture(promise.future).map(_.toString).zipWithIndex.runWith(Sink.seq)
+      Source.future(promise.future).map(_.toString).zipWithIndex.runWith(Sink.seq)
 
       awaitAssert({
         val snapshot = MaterializerState.streamSnapshots(system).futureValue

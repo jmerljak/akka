@@ -1,25 +1,26 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor
 
-import language.postfixOps
 import java.lang.Thread.sleep
 
 import scala.concurrent.Await
-import akka.testkit.TestEvent._
-import akka.testkit.EventFilter
+import scala.concurrent.duration._
+
+import com.github.ghik.silencer.silent
+import language.postfixOps
+
+import akka.pattern.ask
 import akka.testkit.AkkaSpec
 import akka.testkit.DefaultTimeout
+import akka.testkit.EventFilter
+import akka.testkit.TestEvent._
 import akka.testkit.TestLatch
 
-import scala.concurrent.duration._
-import akka.pattern.ask
-import com.github.ghik.silencer.silent
-
 @silent
-class RestartStrategySpec extends AkkaSpec("akka.actor.serialize-messages = off") with DefaultTimeout {
+class RestartStrategySpec extends AkkaSpec with DefaultTimeout {
 
   override def atStartup: Unit = {
     system.eventStream.publish(Mute(EventFilter[Exception]("Crashing...")))
@@ -116,7 +117,7 @@ class RestartStrategySpec extends AkkaSpec("akka.actor.serialize-messages = off"
 
         def receive = {
           case Ping =>
-            if (!pingLatch.isOpen) pingLatch.open else secondPingLatch.open
+            if (!pingLatch.isOpen) pingLatch.open() else secondPingLatch.open()
           case Crash => throw new Exception("Crashing...")
         }
         override def postRestart(reason: Throwable) = {

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka
@@ -15,6 +15,10 @@ import sbt.Keys._
 import sbt._
 
 object AkkaValidatePullRequest extends AutoPlugin {
+
+  object CliOptions {
+    val mimaEnabled = CliOption("akka.mima.enabled", true)
+  }
 
   import ValidatePullRequest.autoImport._
 
@@ -87,9 +91,8 @@ object MimaWithPrValidation extends AutoPlugin {
 
   override def trigger = allRequirements
   override def requires = AkkaValidatePullRequest && MimaPlugin
-  override lazy val projectSettings = Seq(
-    additionalTasks += mimaReportBinaryIssues
-  )
+  override lazy val projectSettings =
+    CliOptions.mimaEnabled.ifTrue(additionalTasks += mimaReportBinaryIssues).toList
 }
 
 /**

@@ -1,19 +1,21 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.persistence.typed.scaladsl
 
 import scala.concurrent.ExecutionContext
+import scala.concurrent.Future
 import scala.concurrent.duration._
+
+import com.github.ghik.silencer.silent
+
 import akka.actor.typed.{ ActorRef, Behavior }
+import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.scaladsl.TimerScheduler
 import akka.persistence.typed.PersistenceId
 import akka.persistence.typed.RecoveryCompleted
-import com.github.ghik.silencer.silent
-
-import scala.concurrent.Future
 
 // unused names in pattern match can be useful in the docs
 @silent
@@ -33,7 +35,7 @@ object PersistentActorCompileOnlyTest {
     case class ExampleState(events: List[String] = Nil)
 
     EventSourcedBehavior[MyCommand, MyEvent, ExampleState](
-      persistenceId = PersistenceId("sample-id-1"),
+      persistenceId = PersistenceId.ofUniqueId("sample-id-1"),
       emptyState = ExampleState(Nil),
       commandHandler = CommandHandler.command {
         case Cmd(data, sender) =>
@@ -64,7 +66,7 @@ object PersistentActorCompileOnlyTest {
     def performSideEffect(sender: ActorRef[AcknowledgeSideEffect], correlationId: Int, data: String): Unit = {
       import akka.actor.typed.scaladsl.AskPattern._
       implicit val timeout: akka.util.Timeout = 1.second
-      implicit val scheduler: akka.actor.typed.Scheduler = ???
+      implicit val system: ActorSystem[_] = ???
       implicit val ec: ExecutionContext = ???
 
       val response: Future[RecoveryComplete.Response] =
@@ -77,7 +79,7 @@ object PersistentActorCompileOnlyTest {
       Behaviors.setup(
         ctx =>
           EventSourcedBehavior[Command, Event, EventsInFlight](
-            persistenceId = PersistenceId("recovery-complete-id"),
+            persistenceId = PersistenceId.ofUniqueId("recovery-complete-id"),
             emptyState = EventsInFlight(0, Map.empty),
             commandHandler = (state, cmd) =>
               cmd match {
@@ -118,7 +120,7 @@ object PersistentActorCompileOnlyTest {
     case class MoodChanged(to: Mood) extends Event
 
     val b: Behavior[Command] = EventSourcedBehavior[Command, Event, Mood](
-      persistenceId = PersistenceId("myPersistenceId"),
+      persistenceId = PersistenceId.ofUniqueId("myPersistenceId"),
       emptyState = Happy,
       commandHandler = { (state, command) =>
         state match {
@@ -143,7 +145,7 @@ object PersistentActorCompileOnlyTest {
       })
 
     Behaviors.withTimers((timers: TimerScheduler[Command]) => {
-      timers.startTimerWithFixedDelay("swing", MoodSwing, 10.seconds)
+      timers.startTimerWithFixedDelay(MoodSwing, 10.seconds)
       b
     })
   }
@@ -162,7 +164,7 @@ object PersistentActorCompileOnlyTest {
     case class State(tasksInFlight: List[Task])
 
     EventSourcedBehavior[Command, Event, State](
-      persistenceId = PersistenceId("asdf"),
+      persistenceId = PersistenceId.ofUniqueId("asdf"),
       emptyState = State(Nil),
       commandHandler = CommandHandler.command {
         case RegisterTask(task) => Effect.persist(TaskRegistered(task))
@@ -195,7 +197,7 @@ object PersistentActorCompileOnlyTest {
     val behavior: Behavior[Command] = Behaviors.setup(
       ctx =>
         EventSourcedBehavior[Command, Event, State](
-          persistenceId = PersistenceId("asdf"),
+          persistenceId = PersistenceId.ofUniqueId("asdf"),
           emptyState = State(Nil),
           commandHandler = (_, cmd) =>
             cmd match {
@@ -214,87 +216,6 @@ object PersistentActorCompileOnlyTest {
                 State(state.tasksInFlight.filter(_ != task))
             }))
 
-  }
-
-  object Rehydrating {
-    type Id = String
-
-    sealed trait Command
-    case class AddItem(id: Id) extends Command
-    case class RemoveItem(id: Id) extends Command
-    case class GetTotalPrice(sender: ActorRef[Int]) extends Command
-    /* Internal: */
-    case class GotMetaData(data: MetaData) extends Command
-
-    /**
-     * Items have all kinds of metadata, but we only persist the 'id', and
-     * rehydrate the metadata on recovery from a registry
-     */
-    case class Item(id: Id, name: String, price: Int)
-    case class Basket(items: Seq[Item]) {
-      def updatedWith(data: MetaData): Basket = ???
-    }
-
-    sealed trait Event
-    case class ItemAdded(id: Id) extends Event
-    case class ItemRemoved(id: Id) extends Event
-
-    /*
-     * The metadata registry
-     */
-    case class GetMetaData(id: Id, sender: ActorRef[MetaData])
-    case class MetaData(id: Id, name: String, price: Int)
-    val metadataRegistry: ActorRef[GetMetaData] = ???
-
-    def isFullyHydrated(basket: Basket, ids: List[Id]) = basket.items.map(_.id) == ids
-
-    val behavior: Behavior[Command] = Behaviors.setup { ctx =>
-      var basket = Basket(Nil)
-      var stash: Seq[Command] = Nil
-      val adapt = ctx.messageAdapter((m: MetaData) => GotMetaData(m))
-
-      def addItem(id: Id, self: ActorRef[Command]) =
-        Effect.persist[Event, List[Id]](ItemAdded(id)).thenRun(_ => metadataRegistry ! GetMetaData(id, adapt))
-
-      EventSourcedBehavior[Command, Event, List[Id]](
-        persistenceId = PersistenceId("basket-1"),
-        emptyState = Nil,
-        commandHandler = { (state, cmd) =>
-          if (isFullyHydrated(basket, state))
-            cmd match {
-              case AddItem(id)    => addItem(id, ctx.self)
-              case RemoveItem(id) => Effect.persist(ItemRemoved(id))
-              case GotMetaData(data) =>
-                basket = basket.updatedWith(data)
-                Effect.none
-              case GetTotalPrice(sender) =>
-                sender ! basket.items.map(_.price).sum
-                Effect.none
-            } else
-            cmd match {
-              case AddItem(id)    => addItem(id, ctx.self)
-              case RemoveItem(id) => Effect.persist(ItemRemoved(id))
-              case GotMetaData(data) =>
-                basket = basket.updatedWith(data)
-                if (isFullyHydrated(basket, state)) {
-                  stash.foreach(ctx.self ! _)
-                  stash = Nil
-                }
-                Effect.none
-              case cmd: GetTotalPrice =>
-                stash :+= cmd
-                Effect.none
-            }
-        },
-        eventHandler = (state, evt) =>
-          evt match {
-            case ItemAdded(id)   => id +: state
-            case ItemRemoved(id) => state.filter(_ != id)
-          }).receiveSignal {
-        case (state, RecoveryCompleted) =>
-          state.foreach(id => metadataRegistry ! GetMetaData(id, adapt))
-      }
-    }
   }
 
   object FactoringOutEventHandling {
@@ -351,7 +272,7 @@ object PersistentActorCompileOnlyTest {
     }
 
     EventSourcedBehavior[Command, Event, Mood](
-      persistenceId = PersistenceId("myPersistenceId"),
+      persistenceId = PersistenceId.ofUniqueId("myPersistenceId"),
       emptyState = Sad,
       commandHandler,
       eventHandler)
@@ -369,7 +290,7 @@ object PersistentActorCompileOnlyTest {
 
     private val commandHandler: CommandHandler[Command, Event, State] = CommandHandler.command {
       case Enough =>
-        Effect.persist(Done).thenRun((_: State) => println("yay")).thenStop
+        Effect.persist(Done).thenRun((_: State) => println("yay")).thenStop()
     }
 
     private val eventHandler: (State, Event) => State = {
@@ -377,7 +298,7 @@ object PersistentActorCompileOnlyTest {
     }
 
     EventSourcedBehavior[Command, Event, State](
-      persistenceId = PersistenceId("myPersistenceId"),
+      persistenceId = PersistenceId.ofUniqueId("myPersistenceId"),
       emptyState = new State,
       commandHandler,
       eventHandler)
@@ -389,7 +310,7 @@ object PersistentActorCompileOnlyTest {
     class Second extends State
 
     EventSourcedBehavior[String, String, State](
-      persistenceId = PersistenceId("myPersistenceId"),
+      persistenceId = PersistenceId.ofUniqueId("myPersistenceId"),
       emptyState = new First,
       commandHandler = CommandHandler.command { cmd =>
         Effect.persist(cmd).thenRun {

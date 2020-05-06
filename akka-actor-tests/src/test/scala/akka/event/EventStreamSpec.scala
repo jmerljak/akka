@@ -1,21 +1,21 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.event
 
+import scala.concurrent.duration._
+
+import com.typesafe.config.ConfigFactory
 import language.postfixOps
 
-import scala.concurrent.duration._
 import akka.actor._
-import com.typesafe.config.ConfigFactory
 import akka.testkit.{ AkkaSpec, TestProbe }
 
 object EventStreamSpec {
 
   val config = ConfigFactory.parseString("""
       akka {
-        actor.serialize-messages = off
         stdout-loglevel = WARNING
         loglevel = INFO
         loggers = ["akka.event.EventStreamSpec$MyLog", "%s"]
@@ -24,10 +24,10 @@ object EventStreamSpec {
 
   val configUnhandled = ConfigFactory.parseString("""
       akka {
-        actor.serialize-messages = off
         stdout-loglevel = WARNING
         loglevel = WARNING
         actor.debug.unhandled = on
+        log-dead-letters = off
       }
       """)
 
@@ -86,7 +86,7 @@ class EventStreamSpec extends AkkaSpec(EventStreamSpec.config) {
         expectMsg(M(42))
         bus.unsubscribe(testActor)
         bus.publish(M(13))
-        expectNoMessage
+        expectNoMessage()
       }
     }
 
@@ -160,7 +160,7 @@ class EventStreamSpec extends AkkaSpec(EventStreamSpec.config) {
         bus.publish(a)
         expectMsg(b2)
         expectMsg(a)
-        expectNoMessage
+        expectNoMessage()
       }
     }
 

@@ -1,15 +1,17 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote
 
 import scala.collection.immutable
-import akka.testkit._
-import akka.routing._
+
+import com.typesafe.config._
+
 import akka.actor._
 import akka.remote.routing._
-import com.typesafe.config._
+import akka.routing._
+import akka.testkit._
 import akka.testkit.TestActors.echoActorProps
 
 object RemoteRouterSpec {
@@ -23,7 +25,6 @@ object RemoteRouterSpec {
 
 class RemoteRouterSpec extends AkkaSpec(s"""
     akka.actor.provider = remote
-    akka.actor.serialize-messages = off
     akka.remote.use-unsafe-remote-features-outside-cluster = on
     akka.remote.classic.netty.tcp {
       hostname = localhost
@@ -118,7 +119,7 @@ class RemoteRouterSpec extends AkkaSpec(s"""
       masterSystem.stop(router)
     }
 
-    "deploy its children on remote host driven by programatic definition" in {
+    "deploy its children on remote host driven by programmatic definition" in {
       val probe = TestProbe()(masterSystem)
       val router = masterSystem.actorOf(
         new RemoteRouterConfig(RoundRobinPool(2), Seq(Address(protocol, sysName, "localhost", port)))
@@ -260,7 +261,7 @@ class RemoteRouterSpec extends AkkaSpec(s"""
       // we don't really support deployment configuration of system actors, but
       // it's used for the pool of the SimpleDnsManager "/IO-DNS/inet-address"
       val probe = TestProbe()(masterSystem)
-      val parent = masterSystem.asInstanceOf[ExtendedActorSystem].systemActorOf(Props[Parent], "sys-parent")
+      val parent = masterSystem.asInstanceOf[ExtendedActorSystem].systemActorOf(Props[Parent](), "sys-parent")
       parent.tell((FromConfig.props(echoActorProps), "round"), probe.ref)
       val router = probe.expectMsgType[ActorRef]
       val replies = collectRouteePaths(probe, router, 10)

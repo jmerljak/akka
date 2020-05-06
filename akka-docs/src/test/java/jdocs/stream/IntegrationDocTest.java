@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2015-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package jdocs.stream;
@@ -59,7 +59,7 @@ public class IntegrationDocTest extends AbstractJavaTest {
                 + "}                                      \n"
                 + "akka.actor.default-mailbox.mailbox-type = akka.dispatch.UnboundedMailbox\n");
 
-    system = ActorSystem.create("ActorPublisherDocTest", config);
+    system = ActorSystem.create("IntegrationDocTest", config);
     ref = system.actorOf(Props.create(Translator.class));
   }
 
@@ -320,7 +320,7 @@ public class IntegrationDocTest extends AbstractJavaTest {
   }
   // #ask-actor
 
-  // #actorRefWithAck-actor
+  // #actorRefWithBackpressure-actor
   enum Ack {
     INSTANCE;
   }
@@ -381,7 +381,7 @@ public class IntegrationDocTest extends AbstractJavaTest {
           .build();
     }
   }
-  // #actorRefWithAck-actor
+  // #actorRefWithBackpressure-actor
 
   @SuppressWarnings("unchecked")
   @Test
@@ -399,8 +399,8 @@ public class IntegrationDocTest extends AbstractJavaTest {
   }
 
   @Test
-  public void actorRefWithAckExample() throws Exception {
-    // #actorRefWithAck
+  public void actorRefWithBackpressure() throws Exception {
+    // #actorRefWithBackpressure
     Source<String, NotUsed> words = Source.from(Arrays.asList("hello", "hi"));
 
     final TestKit probe = new TestKit(system);
@@ -408,7 +408,7 @@ public class IntegrationDocTest extends AbstractJavaTest {
     ActorRef receiver = system.actorOf(Props.create(AckingReceiver.class, probe.getRef()));
 
     Sink<String, NotUsed> sink =
-        Sink.<String>actorRefWithAck(
+        Sink.<String>actorRefWithBackpressure(
             receiver,
             new StreamInitialized(),
             Ack.INSTANCE,
@@ -421,7 +421,7 @@ public class IntegrationDocTest extends AbstractJavaTest {
     probe.expectMsg("hello");
     probe.expectMsg("hi");
     probe.expectMsg("Stream completed");
-    // #actorRefWithAck
+    // #actorRefWithBackpressure
   }
 
   @Test

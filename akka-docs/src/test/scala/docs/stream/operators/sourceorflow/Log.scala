@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2019-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package docs.stream.operators.sourceorflow
@@ -18,8 +18,8 @@ object Log {
       .addAttributes(
         Attributes.logLevels(
           onElement = Attributes.LogLevels.Off,
-          onFailure = Attributes.LogLevels.Error,
-          onFinish = Attributes.LogLevels.Info))
+          onFinish = Attributes.LogLevels.Info,
+          onFailure = Attributes.LogLevels.Error))
     //#log
   }
 }

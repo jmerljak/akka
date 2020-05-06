@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote.artery
@@ -16,6 +16,14 @@ import java.util.concurrent.locks.LockSupport
 
 import scala.concurrent.duration._
 
+import com.typesafe.config.ConfigFactory
+import io.aeron.Aeron
+import io.aeron.CncFileDescriptor
+import io.aeron.driver.MediaDriver
+import org.HdrHistogram.Histogram
+import org.agrona.IoUtil
+import org.agrona.concurrent.ManyToOneConcurrentArrayQueue
+
 import akka.Done
 import akka.actor._
 import akka.remote.testconductor.RoleName
@@ -28,13 +36,6 @@ import akka.stream.scaladsl.Flow
 import akka.stream.scaladsl.Source
 import akka.testkit._
 import akka.util.ByteString
-import com.typesafe.config.ConfigFactory
-import io.aeron.Aeron
-import io.aeron.CncFileDescriptor
-import io.aeron.driver.MediaDriver
-import org.HdrHistogram.Histogram
-import org.agrona.IoUtil
-import org.agrona.concurrent.ManyToOneConcurrentArrayQueue
 
 object AeronStreamLatencySpec extends MultiNodeConfig {
   val first = role("first")
@@ -51,8 +52,6 @@ object AeronStreamLatencySpec extends MultiNodeConfig {
          testconductor.barrier-timeout = ${barrierTimeout.toSeconds}s
          actor {
            provider = remote
-           serialize-creators = false
-           serialize-messages = false
          }
          remote.artery {
            enabled = off
@@ -195,7 +194,7 @@ abstract class AeronStreamLatencySpec
       val started = TestProbe()
       val startMsg = "0".getBytes("utf-8")
       Source
-        .fromGraph(new AeronSource(channel(first), streamId, aeron, taskRunner, pool, IgnoreEventSink, 0))
+        .fromGraph(new AeronSource(channel(first), streamId, aeron, taskRunner, pool, NoOpRemotingFlightRecorder, 0))
         .via(killSwitch.flow)
         .runForeach { envelope =>
           val bytes = ByteString.fromByteBuffer(envelope.byteBuffer)
@@ -226,7 +225,14 @@ abstract class AeronStreamLatencySpec
           }
           .throttle(1, 200.milliseconds, 1, ThrottleMode.Shaping)
           .runWith(
-            new AeronSink(channel(second), streamId, aeron, taskRunner, pool, giveUpMessageAfter, IgnoreEventSink))
+            new AeronSink(
+              channel(second),
+              streamId,
+              aeron,
+              taskRunner,
+              pool,
+              giveUpMessageAfter,
+              NoOpRemotingFlightRecorder))
         started.expectMsg(Done)
       }
 
@@ -245,7 +251,15 @@ abstract class AeronStreamLatencySpec
         val queueValue = Source
           .fromGraph(new SendQueue[Unit](sendToDeadLetters))
           .via(sendFlow)
-          .to(new AeronSink(channel(second), streamId, aeron, taskRunner, pool, giveUpMessageAfter, IgnoreEventSink))
+          .to(
+            new AeronSink(
+              channel(second),
+              streamId,
+              aeron,
+              taskRunner,
+              pool,
+              giveUpMessageAfter,
+              NoOpRemotingFlightRecorder))
           .run()
 
         val queue = new ManyToOneConcurrentArrayQueue[Unit](1024)
@@ -292,7 +306,7 @@ abstract class AeronStreamLatencySpec
   "Latency of Aeron Streams" must {
 
     "start upd port" in {
-      system.actorOf(Props[UdpPortActor], "updPort")
+      system.actorOf(Props[UdpPortActor](), "updPort")
       enterBarrier("udp-port-started")
     }
 
@@ -300,9 +314,16 @@ abstract class AeronStreamLatencySpec
       runOn(second) {
         // just echo back
         Source
-          .fromGraph(new AeronSource(channel(second), streamId, aeron, taskRunner, pool, IgnoreEventSink, 0))
+          .fromGraph(new AeronSource(channel(second), streamId, aeron, taskRunner, pool, NoOpRemotingFlightRecorder, 0))
           .runWith(
-            new AeronSink(channel(first), streamId, aeron, taskRunner, pool, giveUpMessageAfter, IgnoreEventSink))
+            new AeronSink(
+              channel(first),
+              streamId,
+              aeron,
+              taskRunner,
+              pool,
+              giveUpMessageAfter,
+              NoOpRemotingFlightRecorder))
       }
       enterBarrier("echo-started")
     }

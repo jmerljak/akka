@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster
@@ -11,27 +11,29 @@ import java.util.function.Consumer
 import scala.annotation.tailrec
 import scala.util.control.NonFatal
 
-import akka.remote.RemoteSettings
-import akka.remote.artery.ArterySettings
-import akka.remote.artery.aeron.TaskRunner
-import akka.remote.testkit.MultiNodeConfig
-import akka.remote.testkit.MultiNodeSpec
 import com.typesafe.config.ConfigFactory
+import io.aeron.CommonContext
 import io.aeron.driver.MediaDriver
 import io.aeron.driver.ThreadingMode
 import org.agrona.IoUtil
-import io.aeron.CommonContext
+
+import akka.remote.RemoteSettings
+import akka.remote.artery.ArterySettings
+import akka.remote.artery.ArterySettings.AeronUpd
+import akka.remote.artery.aeron.TaskRunner
+import akka.remote.testkit.MultiNodeConfig
+import akka.remote.testkit.MultiNodeSpec
 
 object SharedMediaDriverSupport {
 
   private val mediaDriver = new AtomicReference[Option[MediaDriver]](None)
 
   def loadArterySettings(config: MultiNodeConfig): ArterySettings =
-    (new RemoteSettings(ConfigFactory.load(config.config))).Artery
+    new RemoteSettings(ConfigFactory.load(config.config)).Artery
 
   def startMediaDriver(config: MultiNodeConfig): Unit = {
     val arterySettings = loadArterySettings(config)
-    if (arterySettings.Enabled) {
+    if (arterySettings.Enabled && arterySettings.Transport == AeronUpd) {
       val aeronDir = arterySettings.Advanced.Aeron.AeronDirectoryName
       require(aeronDir.nonEmpty, "aeron-dir must be defined")
 
@@ -48,7 +50,7 @@ object SharedMediaDriverSupport {
           })
           catch {
             case NonFatal(e) =>
-              println(e.getMessage)
+              println("Exception checking isDriverActive: " + e.getMessage)
               false
           }
           if (active) false

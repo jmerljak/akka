@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package typed.tutorial_5
@@ -45,7 +45,7 @@ class DeviceGroupQuery(
     timeout: FiniteDuration,
     context: ActorContext[DeviceGroupQuery.Command],
     timers: TimerScheduler[DeviceGroupQuery.Command])
-    extends AbstractBehavior[DeviceGroupQuery.Command] {
+    extends AbstractBehavior[DeviceGroupQuery.Command](context) {
 
   import DeviceGroupQuery._
   import DeviceManager.DeviceNotAvailable

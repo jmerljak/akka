@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote.serialization
@@ -9,17 +9,19 @@ import java.nio.charset.StandardCharsets
 import java.util.Optional
 import java.util.concurrent.TimeUnit
 
+import scala.concurrent.duration.{ FiniteDuration, TimeUnit }
+
+import com.typesafe.config.{ Config, ConfigFactory, ConfigRenderOptions }
+
 import akka.{ Done, NotUsed }
 import akka.actor._
 import akka.dispatch.Dispatchers
+import akka.remote._
 import akka.remote.WireFormats.AddressData
 import akka.remote.routing.RemoteRouterConfig
-import akka.remote._
 import akka.routing._
 import akka.serialization.{ BaseSerializer, Serialization, SerializationExtension, SerializerWithStringManifest }
-import com.typesafe.config.{ Config, ConfigFactory, ConfigRenderOptions }
 import akka.util.ccompat.JavaConverters._
-import scala.concurrent.duration.{ FiniteDuration, TimeUnit }
 
 class MiscMessageSerializer(val system: ExtendedActorSystem) extends SerializerWithStringManifest with BaseSerializer {
 

@@ -1,8 +1,15 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster
+
+import scala.concurrent.Future
+import scala.concurrent.duration._
+import scala.util.Failure
+import scala.util.Success
+
+import com.typesafe.config.ConfigFactory
 
 import akka.Done
 import akka.actor.{ Actor, ActorIdentity, ActorLogging, ActorRef, Identify, Props }
@@ -21,22 +28,22 @@ import akka.stream.scaladsl.StreamRefs
 import akka.stream.testkit.TestSubscriber
 import akka.stream.testkit.scaladsl.TestSink
 import akka.testkit._
-import com.typesafe.config.ConfigFactory
-
-import scala.concurrent.Future
-import scala.concurrent.duration._
-import scala.util.Failure
-import scala.util.Success
+import akka.util.JavaDurationConverters._
 
 object StreamRefSpec extends MultiNodeConfig {
   val first = role("first")
   val second = role("second")
   val third = role("third")
 
-  commonConfig(debugConfig(on = false).withFallback(ConfigFactory.parseString("""
+  commonConfig(
+    debugConfig(on = false)
+      .withFallback(ConfigFactory.parseString("""
+        akka.stream.materializer.stream-ref.subscription-timeout = 10 s
         akka.cluster {
-          auto-down-unreachable-after = 1s
-        }""")).withFallback(MultiNodeClusterSpec.clusterConfig))
+          downing-provider-class = akka.cluster.testkit.AutoDowning
+          testkit.auto-down-unreachable-after = 1s
+        }"""))
+      .withFallback(MultiNodeClusterSpec.clusterConfig))
 
   testTransport(on = true)
 
@@ -50,7 +57,7 @@ object StreamRefSpec extends MultiNodeConfig {
 
   class DataSource(streamLifecycleProbe: ActorRef) extends Actor with ActorLogging {
     import context.dispatcher
-    implicit val mat = Materializer(context)
+    implicit val mat: Materializer = Materializer(context)
 
     def receive = {
       case RequestLogs(streamId) =>
@@ -96,7 +103,7 @@ object StreamRefSpec extends MultiNodeConfig {
   class DataReceiver(streamLifecycleProbe: ActorRef) extends Actor with ActorLogging {
 
     import context.dispatcher
-    implicit val mat = Materializer(context)
+    implicit val mat: Materializer = Materializer(context)
 
     def receive = {
       case PrepareUpload(nodeId) =>
@@ -244,7 +251,14 @@ abstract class StreamRefSpec extends MultiNodeSpec(StreamRefSpec) with MultiNode
         streamLifecycle1.expectMsg("failed-system-42-tmp")
       }
       runOn(third) {
-        streamLifecycle3.expectMsg("failed-system-42-tmp")
+        // there's a race here, we know the SourceRef actor was started but we don't know if it
+        // got the remote actor ref and watched it terminate or if we cut connection before that
+        // and it triggered the subscription timeout. Therefore we must wait more than the
+        // the subscription timeout for a failure
+        val timeout = system.settings.config
+            .getDuration("akka.stream.materializer.stream-ref.subscription-timeout")
+            .asScala + 2.seconds
+        streamLifecycle3.expectMsg(timeout, "failed-system-42-tmp")
       }
 
       enterBarrier("after-3")

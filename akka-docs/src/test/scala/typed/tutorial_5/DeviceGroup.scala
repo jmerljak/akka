@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package typed.tutorial_5
@@ -27,7 +27,7 @@ object DeviceGroup {
 
 //#query-added
 class DeviceGroup(context: ActorContext[DeviceGroup.Command], groupId: String)
-    extends AbstractBehavior[DeviceGroup.Command] {
+    extends AbstractBehavior[DeviceGroup.Command](context) {
   import DeviceGroup._
   import DeviceManager.{
     DeviceRegistered,

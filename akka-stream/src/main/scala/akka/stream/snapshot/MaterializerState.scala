@@ -1,22 +1,22 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.snapshot
 
-import akka.actor.ActorSystem
-import akka.actor.{ ActorPath, ActorRef }
-import akka.annotation.{ ApiMayChange, DoNotInherit, InternalApi }
-import akka.stream.impl.{ PhasedFusingActorMaterializer, StreamSupervisor }
-import akka.pattern.ask
-import akka.stream.SystemMaterializer
-import akka.stream.impl.fusing.ActorGraphInterpreter
-import akka.stream.{ Attributes, Materializer }
-import akka.util.Timeout
-
 import scala.collection.immutable
 import scala.concurrent.{ ExecutionContext, Future }
 import scala.concurrent.duration._
+
+import akka.actor.{ ActorPath, ActorRef }
+import akka.actor.ActorSystem
+import akka.annotation.{ ApiMayChange, DoNotInherit, InternalApi }
+import akka.pattern.ask
+import akka.stream.{ Attributes, Materializer }
+import akka.stream.SystemMaterializer
+import akka.stream.impl.{ PhasedFusingActorMaterializer, StreamSupervisor }
+import akka.stream.impl.fusing.ActorGraphInterpreter
+import akka.util.Timeout
 
 /**
  * Debug utility to dump the running streams of a materializers in a structure describing the graph layout

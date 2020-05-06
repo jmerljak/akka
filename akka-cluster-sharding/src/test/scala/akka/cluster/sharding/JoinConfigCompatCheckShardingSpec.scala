@@ -1,15 +1,17 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster.sharding
 
+import scala.collection.{ immutable => im }
+import scala.concurrent.duration._
+
+import com.typesafe.config.{ Config, ConfigFactory }
+
 import akka.actor.ActorSystem
 import akka.cluster.{ Cluster, ClusterReadView }
 import akka.testkit.{ AkkaSpec, LongRunningTest }
-import com.typesafe.config.{ Config, ConfigFactory }
-import scala.concurrent.duration._
-import scala.collection.{ immutable => im }
 
 class JoinConfigCompatCheckShardingSpec extends AkkaSpec() {
 

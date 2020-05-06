@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.io
@@ -8,12 +8,14 @@ import java.lang.{ Iterable => JIterable }
 import java.net.InetSocketAddress
 
 import scala.collection.immutable
+
+import com.github.ghik.silencer.silent
+
+import akka.actor._
 import akka.io.Inet.SocketOption
 import akka.io.Udp.UdpSettings
 import akka.util.ByteString
-import akka.actor._
 import akka.util.ccompat._
-import com.github.ghik.silencer.silent
 
 /**
  * UDP Extension for Akka’s IO layer.
@@ -38,6 +40,7 @@ object UdpConnected extends ExtensionId[UdpConnectedExt] with ExtensionIdProvide
    * Java API: retrieve the UdpConnected extension for the given system.
    */
   override def get(system: ActorSystem): UdpConnectedExt = super.get(system)
+  override def get(system: ClassicActorSystemProvider): UdpConnectedExt = super.get(system)
 
   /**
    * The common interface for [[Command]] and [[Event]].
@@ -179,8 +182,8 @@ class UdpConnectedExt(system: ExtendedActorSystem) extends IO.Extension {
  * Java API: factory methods for the message types used when communicating with the UdpConnected service.
  */
 object UdpConnectedMessage {
-  import language.implicitConversions
   import UdpConnected._
+  import language.implicitConversions
 
   /**
    * Send this message to the [[UdpExt#manager]] in order to bind to a local

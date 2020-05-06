@@ -1,11 +1,12 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package docs.serialization {
 
   //#imports
   import akka.actor._
+  import akka.actor.typed.scaladsl.Behaviors
   import akka.cluster.Cluster
   import akka.serialization._
 
@@ -208,6 +209,17 @@ package docs.serialization {
       back should be(original)
 
       shutdown(system)
+    }
+
+    def demonstrateTypedActorSystem(): Unit = {
+      //#programmatic-typed
+      import akka.actor.typed.ActorSystem
+
+      val system = ActorSystem(Behaviors.empty, "example")
+
+      // Get the Serialization Extension
+      val serialization = SerializationExtension(system)
+      //#programmatic-typed
     }
 
     def demonstrateSerializationOfActorRefs(): Unit = {

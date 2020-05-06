@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2014-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package docs.akka.typed
@@ -18,7 +18,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import org.scalatest.WordSpecLike
+import org.scalatest.wordspec.AnyWordSpecLike
 
 object OOIntroSpec {
 
@@ -48,7 +48,7 @@ object OOIntroSpec {
     def apply(): Behavior[RoomCommand] =
       Behaviors.setup(context => new ChatRoomBehavior(context))
 
-    class ChatRoomBehavior(context: ActorContext[RoomCommand]) extends AbstractBehavior[RoomCommand] {
+    class ChatRoomBehavior(context: ActorContext[RoomCommand]) extends AbstractBehavior[RoomCommand](context) {
       private var sessions: List[ActorRef[SessionCommand]] = List.empty
 
       override def onMessage(message: RoomCommand): Behavior[RoomCommand] = {
@@ -56,7 +56,7 @@ object OOIntroSpec {
           case GetSession(screenName, client) =>
             // create a child actor for further interaction with the client
             val ses = context.spawn(
-              new SessionBehavior(context.self, screenName, client),
+              SessionBehavior(context.self, screenName, client),
               name = URLEncoder.encode(screenName, StandardCharsets.UTF_8.name))
             client ! SessionGranted(ses)
             sessions = ses :: sessions
@@ -69,11 +69,20 @@ object OOIntroSpec {
       }
     }
 
+    object SessionBehavior {
+      def apply(
+          room: ActorRef[PublishSessionMessage],
+          screenName: String,
+          client: ActorRef[SessionEvent]): Behavior[SessionCommand] =
+        Behaviors.setup(ctx => new SessionBehavior(ctx, room, screenName, client))
+    }
+
     private class SessionBehavior(
+        context: ActorContext[SessionCommand],
         room: ActorRef[PublishSessionMessage],
         screenName: String,
         client: ActorRef[SessionEvent])
-        extends AbstractBehavior[SessionCommand] {
+        extends AbstractBehavior[SessionCommand](context) {
 
       override def onMessage(msg: SessionCommand): Behavior[SessionCommand] = {
         msg match {
@@ -136,7 +145,7 @@ object OOIntroSpec {
 
 }
 
-class OOIntroSpec extends ScalaTestWithActorTestKit with WordSpecLike with LogCapturing {
+class OOIntroSpec extends ScalaTestWithActorTestKit with AnyWordSpecLike with LogCapturing {
 
   import OOIntroSpec._
 

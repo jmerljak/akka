@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.io
@@ -7,6 +7,9 @@ package akka.io
 import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
+
+import com.github.ghik.silencer.silent
+
 import akka.remote.RemotingMultiNodeSpec
 import akka.remote.testkit.MultiNodeConfig
 
@@ -17,6 +20,7 @@ object DnsSpec extends MultiNodeConfig {
 class DnsSpecMultiJvmNode1 extends DnsSpec
 
 // This is a multi-jvm tests because it is modifying global System.properties
+@silent("deprecated")
 class DnsSpec extends RemotingMultiNodeSpec(DnsSpec) {
 
   def initialParticipants = roles.size

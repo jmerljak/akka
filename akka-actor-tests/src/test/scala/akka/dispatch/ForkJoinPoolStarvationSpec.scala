@@ -1,16 +1,16 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.dispatch
 
+import com.typesafe.config.ConfigFactory
+
 import akka.actor.{ Actor, Props }
 import akka.testkit.{ AkkaSpec, ImplicitSender }
-import com.typesafe.config.ConfigFactory
 
 object ForkJoinPoolStarvationSpec {
   val config = ConfigFactory.parseString("""
-      |akka.actor.serialize-messages = off
       |actorhang {
       |  task-dispatcher {
       |    mailbox-type = "akka.dispatch.SingleConsumerOnlyUnboundedMailbox"

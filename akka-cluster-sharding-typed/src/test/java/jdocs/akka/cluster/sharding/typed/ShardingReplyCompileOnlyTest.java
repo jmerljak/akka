@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package jdocs.akka.cluster.sharding.typed;
@@ -59,6 +59,7 @@ interface ShardingReplyCompileOnlyTest {
     private int value = 0;
 
     private Counter(ActorContext<Command> context) {
+      super(context);
       this.sharding = ClusterSharding.get(context.getSystem());
     }
 

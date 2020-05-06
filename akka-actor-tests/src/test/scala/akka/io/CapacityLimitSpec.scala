@@ -1,17 +1,17 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.io
 
+import Tcp._
+
 import akka.testkit.{ AkkaSpec, TestProbe }
 import akka.testkit.SocketUtil.temporaryServerAddresses
-import Tcp._
 
 class CapacityLimitSpec extends AkkaSpec("""
     akka.loglevel = ERROR
     akka.io.tcp.max-channels = 4
-    akka.actor.serialize-creators = on
     """) with TcpIntegrationSpecSupport {
 
   "The TCP transport implementation" should {

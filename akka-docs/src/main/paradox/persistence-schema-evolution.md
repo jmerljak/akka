@@ -2,7 +2,7 @@
 
 ## Dependency
 
-This documentation page touches upon @ref[Akka Persitence](persistence.md), so to follow those examples you will want to depend on:
+This documentation page touches upon @ref[Akka Persistence](persistence.md), so to follow those examples you will want to depend on:
 
 @@dependency[sbt,Maven,Gradle] {
   group="com.typesafe.akka"
@@ -12,7 +12,7 @@ This documentation page touches upon @ref[Akka Persitence](persistence.md), so t
 
 ## Introduction
 
-When working on long running projects using @ref:[Persistence](persistence.md), or any kind of [Event Sourcing](http://martinfowler.com/eaaDev/EventSourcing.html) architectures,
+When working on long running projects using @ref:[Persistence](persistence.md), or any kind of [Event Sourcing](https://martinfowler.com/eaaDev/EventSourcing.html) architectures,
 schema evolution becomes one of the more important technical aspects of developing your application.
 The requirements as well as our own understanding of the business domain may (and will) change in time.
 
@@ -40,7 +40,7 @@ In recent years we have observed a tremendous move towards immutable append-only
 the prime technique successfully being used in these settings. For an excellent overview why and how immutable data makes scalability
 and systems design much simpler you may want to read Pat Helland's excellent [Immutability Changes Everything](http://cidrdb.org/cidr2015/Papers/CIDR15_Paper16.pdf) whitepaper.
 
-Since with [Event Sourcing](http://martinfowler.com/eaaDev/EventSourcing.html) the **events are immutable** and usually never deleted – the way schema evolution is handled
+Since with [Event Sourcing](https://martinfowler.com/eaaDev/EventSourcing.html) the **events are immutable** and usually never deleted – the way schema evolution is handled
 differs from how one would go about it in a mutable database setting (e.g. in typical CRUD database applications).
 
 The system needs to be able to continue to work in the presence of "old" events which were stored under the "old" schema.
@@ -68,10 +68,10 @@ definition - in a backwards compatible way - such that the new deserialization c
 
 The most common schema changes you will likely are:
 
- * [adding a field to an event type](#add-field),
- * [remove or rename field in event type](#rename-field),
- * [remove event type](#remove-event-class),
- * [split event into multiple smaller events](#split-large-event-into-smaller).
+ * @ref:[adding a field to an event type](#add-field),
+ * @ref:[remove or rename field in event type](#rename-field),
+ * @ref:[remove event type](#remove-event-class),
+ * @ref:[split event into multiple smaller events](#split-large-event-into-smaller).
 
 The following sections will explain some patterns which can be used to safely evolve your schema when facing those changes.
 
@@ -87,16 +87,21 @@ be able to replay events that were persisted using the old serialization scheme.
 an event-log from one serialization format to another one, however it may be a more involved process if you need
 to perform this on a live system.
 
+@ref:[Serialization with Jackson](serialization-jackson.md) is a good choice in many cases and our
+recommendation if you don't have other preference. It also has support for
+@ref:[Schema Evolution](serialization-jackson.md#schema-evolution).
+
+[Google Protocol Buffers](https://developers.google.com/protocol-buffers/) is good if you want
+more control over the schema evolution of your messages, but it requires more work to develop and
+maintain the mapping between serialized representation and domain representation.
+
 Binary serialization formats that we have seen work well for long-lived applications include the very flexible IDL based:
-[Google Protobuf](https://developers.google.com/protocol-buffers), [Apache Thrift](https://thrift.apache.org/) or [Apache Avro](https://avro.apache.org). Avro schema evolution is more "entire schema" based, instead of
+[Google Protocol Buffers](https://developers.google.com/protocol-buffers), [Apache Thrift](https://thrift.apache.org/)
+or [Apache Avro](https://avro.apache.org). Avro schema evolution is more "entire schema" based, instead of
 single fields focused like in protobuf or thrift, and usually requires using some kind of schema registry.
 
-Users who want their data to be human-readable directly in the write-side
-datastore may opt to use plain-old [JSON](http://json.org) as the storage format, though that comes at a cost of lacking support for schema
-evolution and relatively large marshalling latency.
-
 There are plenty excellent blog posts explaining the various trade-offs between popular serialization formats,
-one post we would like to highlight is the very well illustrated [Schema evolution in Avro, Protocol Buffers and Thrift](http://martin.kleppmann.com/2012/12/05/schema-evolution-in-avro-protocol-buffers-thrift.html)
+one post we would like to highlight is the very well illustrated [Schema evolution in Avro, Protocol Buffers and Thrift](https://martin.kleppmann.com/2012/12/05/schema-evolution-in-avro-protocol-buffers-thrift.html)
 by Martin Kleppmann.
 
 ### Provided default serializers
@@ -133,7 +138,7 @@ serializers, and the yellow payload indicates the user provided event (by callin
 As you can see, the `PersistentMessage` acts as an envelope around the payload, adding various fields related to the
 origin of the event (`persistenceId`, `sequenceNr` and more).
 
-More advanced techniques (e.g. [Remove event class and ignore events](#remove-event-class)) will dive into using the manifests for increasing the
+More advanced techniques (e.g. @ref:[Remove event class and ignore events](#remove-event-class)) will dive into using the manifests for increasing the
 flexibility of the persisted vs. exposed types even more. However for now we will focus on the simpler evolution techniques,
 concerning only configuring the payload serializers.
 
@@ -143,9 +148,9 @@ However, once you move to production you should really *pick a different seriali
 
 @@@ warning
 
-Do not rely on Java serialization (which will be picked by Akka by default if you don't specify any serializers)
-for *serious* application development! It does not lean itself well to evolving schemas over long periods of time,
-and its performance is also not very high (it never was designed for high-throughput scenarios).
+Do not rely on Java serialization for *serious* application development! It does not lean itself well to evolving
+schemas over long periods of time, and its performance is also not very high (it never was designed for high-throughput
+scenarios).
 
 @@@
 
@@ -157,8 +162,7 @@ it to work with your event classes.
 
 @@@ note
 
-Read the @ref:[Akka Serialization](serialization.md) docs to learn more about defining custom serializers,
-to improve performance and maintainability of your system. Do not depend on Java serialization for production deployments.
+Read the @ref:[Akka Serialization](serialization.md) docs to learn more about defining custom serializers.
 
 @@@
 
@@ -199,6 +203,14 @@ some of the various options one might go about handling the described situation.
 a complete guide, so feel free to adapt these techniques depending on your serializer's capabilities
 and/or other domain specific limitations.
 
+@@@ note
+
+@ref:[Serialization with Jackson](serialization-jackson.md) has good support for
+@ref:[Schema Evolution](serialization-jackson.md#schema-evolution) and many of the scenarios described here
+can be solved with that Jackson transformation technique instead.
+
+@@@
+
 <a id="add-field"></a>
 ### Add fields
 
@@ -209,10 +221,8 @@ needs to have an associated code which indicates if it is a window or aisle seat
 **Solution:**
 Adding fields is the most common change you'll need to apply to your messages so make sure the serialization format
 you picked for your payloads can handle it apropriately, i.e. such changes should be *binary compatible*.
-This is achieved using the right serializer toolkit – we recommend something like [Google Protocol Buffers](https://developers.google.com/protocol-buffers/) or
-[Apache Thrift](https://thrift.apache.org/) however other tools may fit your needs just as well – picking a serializer backend is something
-you should research before picking one to run with. In the following examples we will be using protobuf, mostly because
-we are familiar with it, it does its job well and Akka is using it internally as well.
+This is achieved using the right serializer toolkit. In the following examples we will be using protobuf.
+See also @ref:[how to add fields with Jackson](serialization-jackson.md#add-field).
 
 While being able to read messages with missing fields is half of the solution, you also need to deal with the missing
 values somehow. This is usually modeled as some kind of default value, or by representing the field as an @scala[`Option[T]`]@java[`Optional<T>`]
@@ -286,8 +296,8 @@ which was set to `1` (because it was the initial schema), and once you change th
 and write an adapter which can perform the rename.
 
 This approach is popular when your serialization format is something like JSON, where renames can not be performed
-automatically by the serializer. You can do these kinds of "promotions" either manually (as shown in the example below)
-or using a library like @scala[[Stamina](https://github.com/scalapenos/stamina)]@java[[Stamina](https://github.com/javapenos/stamina)] which helps to create those `V1->V2->V3->...->Vn` promotion chains without much boilerplate.
+automatically by the serializer. See also @ref:[how to rename fields with Jackson](serialization-jackson.md#rename-field),
+which is using this kind of versioning approach.
 
 ![persistence-manual-rename.png](./images/persistence-manual-rename.png)
  
@@ -430,7 +440,7 @@ Then the serializer can simply convert the bytes do the domain object by using t
 You want to keep your persisted events in a human-readable format, for example JSON.
 
 **Solution:**
-This is a special case of the [Detach domain model from data model](#detach-domain-from-data-model) pattern, and thus requires some co-operation
+This is a special case of the @ref:[Detach domain model from data model](#detach-domain-from-data-model) pattern, and thus requires some co-operation
 from the Journal implementation to achieve this.
 
 An example of a Journal which may implement this pattern is MongoDB, however other databases such as PostgreSQL
@@ -451,7 +461,7 @@ Java
 This technique only applies if the Akka Persistence plugin you are using provides this capability.
 Check the documentation of your favourite plugin to see if it supports this style of persistence.
 
-If it doesn't, you may want to skim the [list of existing journal plugins](http://akka.io/community/#journal-plugins), just in case some other plugin
+If it doesn't, you may want to skim the [list of existing journal plugins](https://akka.io/community/#journal-plugins), just in case some other plugin
 for your favourite datastore *does* provide this capability.
 
 @@@

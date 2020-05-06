@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.io
@@ -7,6 +7,20 @@ package akka.stream.io
 import java.net._
 import java.security.SecureRandom
 import java.util.concurrent.atomic.AtomicInteger
+
+import scala.collection.immutable
+import scala.concurrent.Await
+import scala.concurrent.ExecutionContext
+import scala.concurrent.Future
+import scala.concurrent.Promise
+import scala.concurrent.duration._
+
+import com.github.ghik.silencer.silent
+import com.github.ghik.silencer.silent
+import com.typesafe.config.Config
+import com.typesafe.config.ConfigFactory
+import org.scalatest.concurrent.PatienceConfiguration
+import org.scalatest.concurrent.PatienceConfiguration.Timeout
 
 import akka.Done
 import akka.NotUsed
@@ -21,32 +35,21 @@ import akka.io.Dns
 import akka.io.DnsProvider
 import akka.io.SimpleDnsCache
 import akka.io.Tcp._
+import akka.io.dns.DnsProtocol
 import akka.stream._
+import akka.stream.scaladsl._
 import akka.stream.scaladsl.Flow
 import akka.stream.scaladsl.Tcp.IncomingConnection
 import akka.stream.scaladsl.Tcp.ServerBinding
-import akka.stream.scaladsl._
 import akka.stream.testkit._
 import akka.stream.testkit.scaladsl.StreamTestKit._
 import akka.testkit.EventFilter
-import akka.testkit.SocketUtil.temporaryServerAddress
+import akka.testkit.SocketUtil.{ temporaryServerAddress, temporaryServerHostnameAndPort }
 import akka.testkit.TestKit
 import akka.testkit.TestLatch
 import akka.testkit.TestProbe
 import akka.testkit.WithLogCapturing
 import akka.util.ByteString
-import com.github.ghik.silencer.silent
-import com.typesafe.config.Config
-import com.typesafe.config.ConfigFactory
-import org.scalatest.concurrent.PatienceConfiguration
-import org.scalatest.concurrent.PatienceConfiguration.Timeout
-
-import scala.collection.immutable
-import scala.concurrent.Await
-import scala.concurrent.ExecutionContext
-import scala.concurrent.Future
-import scala.concurrent.Promise
-import scala.concurrent.duration._
 
 @silent("never used")
 class NonResolvingDnsActor(cache: SimpleDnsCache, config: Config) extends Actor {
@@ -65,6 +68,7 @@ class NonResolvingDnsManager(ext: akka.io.DnsExt) extends Actor {
   }
 }
 
+@silent("deprecated")
 class FailingDnsResolver extends DnsProvider {
   override val cache: Dns = new Dns {
     override def cached(name: String): Option[Dns.Resolved] = None
@@ -72,6 +76,14 @@ class FailingDnsResolver extends DnsProvider {
       // tricky impl detail this is actually where the resolve response is triggered
       // we fake that it fails directly from here
       sender ! Dns.Resolved(name, immutable.Seq.empty, immutable.Seq.empty)
+      None
+    }
+    override def cached(request: DnsProtocol.Resolve): Option[DnsProtocol.Resolved] = None
+    override def resolve(
+        request: DnsProtocol.Resolve,
+        system: ActorSystem,
+        sender: ActorRef): Option[DnsProtocol.Resolved] = {
+      sender ! DnsProtocol.Resolved(request.name, immutable.Seq.empty, immutable.Seq.empty)
       None
     }
   }
@@ -458,14 +470,36 @@ class TcpSpec extends StreamSpec("""
       server.close()
     }
 
+    "properly half-close by default" in assertAllStagesStopped {
+      val writeButDontRead: Flow[ByteString, ByteString, NotUsed] =
+        Flow.fromSinkAndSource(Sink.cancelled, Source.single(ByteString("Early response")))
+
+      val binding =
+        Tcp()
+          .bind("127.0.0.1", 0, halfClose = true)
+          .toMat(Sink.foreach { conn =>
+            conn.flow.join(writeButDontRead).run()
+          })(Keep.left)
+          .run()
+          .futureValue
+
+      val result = Source.empty
+        .via(Tcp().outgoingConnection(binding.localAddress))
+        .toMat(Sink.fold(ByteString.empty)(_ ++ _))(Keep.right)
+        .run()
+
+      result.futureValue should ===(ByteString("Early response"))
+
+      binding.unbind()
+    }
+
     "properly full-close if requested" in assertAllStagesStopped {
-      val serverAddress = temporaryServerAddress()
       val writeButIgnoreRead: Flow[ByteString, ByteString, NotUsed] =
         Flow.fromSinkAndSourceMat(Sink.ignore, Source.single(ByteString("Early response")))(Keep.right)
 
       val binding =
         Tcp()
-          .bind(serverAddress.getHostString, serverAddress.getPort, halfClose = false)
+          .bind("127.0.0.1", 0, halfClose = false)
           .toMat(Sink.foreach { conn =>
             conn.flow.join(writeButIgnoreRead).run()
           })(Keep.left)
@@ -474,7 +508,7 @@ class TcpSpec extends StreamSpec("""
 
       val (promise, result) = Source
         .maybe[ByteString]
-        .via(Tcp().outgoingConnection(serverAddress.getHostString, serverAddress.getPort))
+        .via(Tcp().outgoingConnection(binding.localAddress))
         .toMat(Sink.fold(ByteString.empty)(_ ++ _))(Keep.both)
         .run()
 
@@ -828,18 +862,123 @@ class TcpSpec extends StreamSpec("""
       } finally sys2.terminate()
     }
 
+    "show host and port in bind exception message" in EventFilter[BindException](occurrences = 1).intercept {
+      val (host, port) = temporaryServerHostnameAndPort()
+      val bind = Tcp(system).bind(host, port)
+
+      val probe1 = TestSubscriber.manualProbe[Tcp.IncomingConnection]()
+      val binding1 = bind.to(Sink.fromSubscriber(probe1)).run().futureValue
+
+      probe1.expectSubscription()
+
+      val probe2 = TestSubscriber.manualProbe[Tcp.IncomingConnection]()
+      val binding2 = bind.to(Sink.fromSubscriber(probe2)).run()
+
+      val thrown = the[BindFailedException] thrownBy Await.result(binding2, 3.seconds)
+      thrown.getMessage should include(host)
+      thrown.getMessage should include(port.toString)
+
+      // clean up
+      binding1.unbind().futureValue
+    }
   }
 
-  "TLS client and server convenience methods" should {
+  "TLS client and server convenience methods with SSLEngine setup" should {
 
-    "allow for 'simple' TLS" in {
+    "allow for TLS" in {
+      // cert is valid until 2025, so if this tests starts failing after that you need to create a new one
+      val address = temporaryServerAddress()
+
+      Tcp()
+        .bindAndHandleWithTls(
+          // just echo characters until we reach '\n', then complete stream
+          // also - byte is our framing
+          Flow[ByteString].mapConcat(_.utf8String.toList).takeWhile(_ != '\n').map(c => ByteString(c)),
+          address.getHostName,
+          address.getPort,
+          () => createSSLEngine(TLSRole.server))
+        .futureValue
+      system.log.info(s"Server bound to ${address.getHostString}:${address.getPort}")
+
+      val connectionFlow =
+        Tcp().outgoingConnectionWithTls(address, () => createSSLEngine(TLSRole.client))
+
+      val chars = "hello\n".toList.map(_.toString)
+      val (connectionF, result) =
+        Source(chars)
+          .map(c => ByteString(c))
+          .concat(Source.maybe) // do not complete it from our side
+          .viaMat(connectionFlow)(Keep.right)
+          .map(_.utf8String)
+          .toMat(Sink.fold("")(_ + _))(Keep.both)
+          .run()
+
+      connectionF.futureValue
+      system.log.info(s"Client connected to ${address.getHostString}:${address.getPort}")
+
+      result.futureValue(PatienceConfiguration.Timeout(10.seconds)) should ===("hello")
+    }
+
+    // #setting-up-ssl-engine
+    import java.security.KeyStore
+
+    import javax.net.ssl.KeyManagerFactory
+    import javax.net.ssl.SSLContext
+    import javax.net.ssl.SSLEngine
+    import javax.net.ssl.TrustManagerFactory
+
+    import akka.stream.TLSRole
+
+    // initialize SSLContext once
+    lazy val sslContext: SSLContext = {
+      // Don't hardcode your password in actual code
+      val password = "abcdef".toCharArray
+
+      // trust store and keys in one keystore
+      val keyStore = KeyStore.getInstance("PKCS12")
+      keyStore.load(getClass.getResourceAsStream("/tcp-spec-keystore.p12"), password)
+
+      val trustManagerFactory = TrustManagerFactory.getInstance("SunX509")
+      trustManagerFactory.init(keyStore)
+
+      val keyManagerFactory = KeyManagerFactory.getInstance("SunX509")
+      keyManagerFactory.init(keyStore, password)
+
+      // init ssl context
+      val context = SSLContext.getInstance("TLSv1.2")
+      context.init(keyManagerFactory.getKeyManagers, trustManagerFactory.getTrustManagers, new SecureRandom)
+      context
+    }
+
+    // create new SSLEngine from the SSLContext, which was initialized once
+    def createSSLEngine(role: TLSRole): SSLEngine = {
+      val engine = sslContext.createSSLEngine()
+
+      engine.setUseClientMode(role == akka.stream.Client)
+      engine.setEnabledCipherSuites(Array("TLS_RSA_WITH_AES_128_CBC_SHA"))
+      engine.setEnabledProtocols(Array("TLSv1.2"))
+
+      engine
+    }
+    // #setting-up-ssl-engine
+
+  }
+
+  "TLS client and server convenience methods with deprecated SSLContext setup" should {
+
+    "allow for TLS" in {
+      test()
+    }
+
+    @silent("deprecated")
+    def test(): Unit = {
       // cert is valid until 2025, so if this tests starts failing after that you need to create a new one
       val (sslContext, firstSession) = initSslMess()
       val address = temporaryServerAddress()
 
       Tcp()
         .bindAndHandleTls(
-          // just echo charactes until we reach '\n', then complete stream
+          // just echo characters until we reach '\n', then complete stream
           // also - byte is our framing
           Flow[ByteString].mapConcat(_.utf8String.toList).takeWhile(_ != '\n').map(c => ByteString(c)),
           address.getHostName,
@@ -867,14 +1006,16 @@ class TcpSpec extends StreamSpec("""
       result.futureValue(PatienceConfiguration.Timeout(10.seconds)) should ===("hello")
     }
 
+    @silent("deprecated")
     def initSslMess() = {
       // #setting-up-ssl-context
       import java.security.KeyStore
 
-      import akka.stream.TLSClientAuth
-      import akka.stream.TLSProtocol
       import com.typesafe.sslconfig.akka.AkkaSSLConfig
       import javax.net.ssl._
+
+      import akka.stream.TLSClientAuth
+      import akka.stream.TLSProtocol
 
       val sslConfig = AkkaSSLConfig()
 

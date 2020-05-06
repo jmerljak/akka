@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.testkit.typed.javadsl;
@@ -13,15 +13,12 @@ import akka.actor.typed.Props;
 import akka.actor.typed.javadsl.Behaviors;
 import org.junit.Ignore;
 import org.junit.Test;
-import org.scalatest.junit.JUnitSuite;
+import org.scalatestplus.junit.JUnitSuite;
 import org.slf4j.event.Level;
 
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Optional;
-import java.util.function.Function;
 import java.util.stream.IntStream;
 
 import static org.junit.Assert.assertEquals;
@@ -70,10 +67,10 @@ public class BehaviorTestKitTest extends JUnitSuite {
 
   public static class CreateMessageAdapter implements Command {
     private final Class<Object> clazz;
-    private final Function<Object, Command> f;
+    private final akka.japi.function.Function<Object, Command> f;
 
     @SuppressWarnings("unchecked")
-    public CreateMessageAdapter(Class clazz, Function<Object, Command> f) {
+    public CreateMessageAdapter(Class clazz, akka.japi.function.Function<Object, Command> f) {
       this.clazz = clazz;
       this.f = f;
     }

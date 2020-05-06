@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2019-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package doc.akka.serialization.jackson
@@ -16,8 +16,8 @@ import com.fasterxml.jackson.annotation.JsonSubTypes
 import com.fasterxml.jackson.annotation.JsonTypeInfo
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
-import org.scalatest.Matchers
-import org.scalatest.WordSpecLike
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpecLike
 
 //#marker-interface
 /**
@@ -101,6 +101,31 @@ object SerializationDocSpec {
     #//#several-config
   """
 
+  val configManifestless = """
+    #//#manifestless
+    akka.actor {
+      serializers {
+        jackson-json-event = "akka.serialization.jackson.JacksonJsonSerializer"
+      }
+      serialization-identifiers {
+        jackson-json-event = 9001
+      }
+      serialization-bindings {
+        "com.myservice.MyEvent" = jackson-json-event
+      }
+    }
+    akka.serialization.jackson {
+      jackson-json-event {
+        type-in-manifest = off
+        # Since there is exactly one serialization binding declared for this
+        # serializer above, this is optional, but if there were none or many,
+        # this would be mandatory.
+        deserialization-type = "com.myservice.MyEvent"
+      }
+    }
+    #//#manifestless
+  """
+
   //#polymorphism
   final case class Zoo(primaryAttraction: Animal) extends MySerializable
 
@@ -120,13 +145,14 @@ object SerializationDocSpec {
     #//#date-time
     akka.serialization.jackson.serialization-features {
       WRITE_DATES_AS_TIMESTAMPS = on
+      WRITE_DURATIONS_AS_TIMESTAMPS = on
     }
     #//#date-time
     """
 
   val configWhitelist = """
     #//#whitelist-class-prefix
-    akka.serialization.jackson.whitelist-class-prefix = 
+    akka.serialization.jackson.whitelist-class-prefix =
       ["com.myservice.event.OrderAdded", "com.myservice.command"]
     #//#whitelist-class-prefix
   """
@@ -144,7 +170,7 @@ class SerializationDocSpec
         "jdoc.akka.serialization.jackson.v2c.ItemAdded" = "jdoc.akka.serialization.jackson.v2c.ItemAddedMigration"
         "jdoc.akka.serialization.jackson.v2a.Customer" = "jdoc.akka.serialization.jackson.v2a.CustomerMigration"
         "jdoc.akka.serialization.jackson.v1.OrderAdded" = "jdoc.akka.serialization.jackson.v2a.OrderPlacedMigration"
-        
+
         # migrations for Scala classes
         "doc.akka.serialization.jackson.v2b.ItemAdded" = "doc.akka.serialization.jackson.v2b.ItemAddedMigration"
         "doc.akka.serialization.jackson.v2c.ItemAdded" = "doc.akka.serialization.jackson.v2c.ItemAddedMigration"
@@ -159,7 +185,7 @@ class SerializationDocSpec
       }
     }
     """)))
-    with WordSpecLike
+    with AnyWordSpecLike
     with Matchers
     with BeforeAndAfterAll {
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.event
@@ -7,21 +7,23 @@ package akka.event
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicInteger
 
-import akka.actor.ActorSystem.Settings
-import akka.actor._
-import akka.annotation.{ DoNotInherit, InternalApi }
-import akka.dispatch.RequiresMessageQueue
-import akka.event.Logging._
-import akka.util.unused
-import akka.util.{ Helpers, ReentrantGuard }
-import akka.{ AkkaException, ConfigurationException }
-import com.github.ghik.silencer.silent
-
 import scala.annotation.implicitNotFound
 import scala.collection.immutable
 import scala.concurrent.Await
 import scala.language.existentials
 import scala.util.control.{ NoStackTrace, NonFatal }
+
+import com.github.ghik.silencer.silent
+
+import akka.{ AkkaException, ConfigurationException }
+import akka.actor._
+import akka.actor.ActorSystem.Settings
+import akka.annotation.{ DoNotInherit, InternalApi }
+import akka.dispatch.RequiresMessageQueue
+import akka.event.Logging._
+import akka.util.{ Helpers, ReentrantGuard }
+import akka.util.Timeout
+import akka.util.unused
 
 /**
  * This trait brings log level handling to the EventStream: it reads the log
@@ -198,7 +200,7 @@ trait LoggingBus extends ActorEventBus {
       logName: String): ActorRef = {
     val name = "log" + LogExt(system).id() + "-" + simpleName(clazz)
     val actor = system.systemActorOf(Props(clazz).withDispatcher(system.settings.LoggersDispatcher), name)
-    implicit def timeout = system.settings.LoggerStartTimeout
+    implicit def timeout: Timeout = system.settings.LoggerStartTimeout
     import akka.pattern.ask
     val response = try Await.result(actor ? InitializeLogger(this), timeout.duration)
     catch {
@@ -271,6 +273,11 @@ trait LoggingBus extends ActorEventBus {
 }
 
 /**
+ * INTERNAL API
+ */
+@InternalApi private[akka] final case class ActorWithLogClass(actor: Actor, logClass: Class[_])
+
+/**
  * This is a “marker” class which is inserted as originator class into
  * [[akka.event.Logging.LogEvent]] when the string representation was supplied
  * directly.
@@ -318,6 +325,16 @@ object LogSource {
         case NonFatal(_) => a.path.toString
       }
   }
+
+  /**
+   * INTERNAL API
+   */
+  @InternalApi private[akka] implicit val fromActorWithLoggerClass: LogSource[ActorWithLogClass] =
+    new LogSource[ActorWithLogClass] {
+      def genString(a: ActorWithLogClass) = fromActor.genString(a.actor)
+      override def genString(a: ActorWithLogClass, system: ActorSystem) = fromActor.genString(a.actor, system)
+      override def getClazz(a: ActorWithLogClass): Class[_] = a.logClass
+    }
 
   // this one unfortunately does not work as implicit, because existential types have some weird behavior
   val fromClass: LogSource[Class[_]] = new LogSource[Class[_]] {
@@ -1612,16 +1629,37 @@ trait DiagnosticLoggingAdapter extends LoggingAdapter {
 
 /** DO NOT INHERIT: Class is open only for use by akka-slf4j*/
 @DoNotInherit
-class LogMarker(val name: String)
+class LogMarker(val name: String, val properties: Map[String, Any]) {
+
+  // for binary compatibility
+  def this(name: String) = this(name, Map.empty)
+
+  /** Java API */
+  def getProperties: java.util.Map[String, Object] = {
+    import akka.util.ccompat.JavaConverters._
+    properties.map { case (k, v) => (k, v.asInstanceOf[AnyRef]) }.asJava
+  }
+
+  override def toString: String = s"LogMarker($name,$properties)"
+}
+
 object LogMarker {
 
   /** The Marker is internally transferred via MDC using using this key */
   private[akka] final val MDCKey = "marker"
 
-  def apply(name: String): LogMarker = new LogMarker(name)
+  def apply(name: String): LogMarker = new LogMarker(name, Map.empty)
+
+  def apply(name: String, properties: Map[String, Any]): LogMarker = new LogMarker(name, properties)
 
   /** Java API */
   def create(name: String): LogMarker = apply(name)
+
+  /** Java API */
+  def create(name: String, properties: java.util.Map[String, Any]): LogMarker = {
+    import akka.util.ccompat.JavaConverters._
+    apply(name, properties.asScala.toMap)
+  }
 
   @Deprecated
   @deprecated("use akka.event.LogEventWithMarker#marker instead", since = "2.5.12")
@@ -1632,6 +1670,15 @@ object LogMarker {
     }
 
   private[akka] final val Security = apply("SECURITY")
+
+  /**
+   * INTERNAL API
+   */
+  @InternalApi private[akka] object Properties {
+    val MessageClass = "akkaMessageClass"
+    val RemoteAddress = "akkaRemoteAddress"
+    val RemoteAddressUid = "akkaRemoteAddressUid"
+  }
 
 }
 
@@ -1880,6 +1927,19 @@ class MarkerLoggingAdapter(
   def debug(marker: LogMarker, template: String, arg1: Any, arg2: Any, arg3: Any, arg4: Any): Unit =
     if (isDebugEnabled(marker))
       bus.publish(Debug(logSource, logClass, format(template, arg1, arg2, arg3, arg4), mdc, marker))
+
+  /**
+   * Log message at the specified log level.
+   */
+  def log(marker: LogMarker, level: Logging.LogLevel, message: String): Unit = {
+    level match {
+      case Logging.DebugLevel   => debug(marker, message)
+      case Logging.InfoLevel    => info(marker, message)
+      case Logging.WarningLevel => warning(marker, message)
+      case Logging.ErrorLevel   => error(marker, message)
+      case _                    =>
+    }
+  }
 
   // Copy of LoggingAdapter.format1 due to binary compatibility restrictions
   private def format1(t: String, arg: Any): String = arg match {

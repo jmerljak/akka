@@ -1,38 +1,38 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed.scaladsl
 import java.util.concurrent.atomic.AtomicInteger
 
-import akka.actor.Dropped
-import akka.actor.testkit.typed.scaladsl.LoggingEventFilter
-import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import akka.actor.testkit.typed.scaladsl.TestProbe
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpecLike
+
+import akka.actor.ActorSystem
 import akka.actor.testkit.typed.scaladsl.LogCapturing
+import akka.actor.testkit.typed.scaladsl.LoggingTestKit
+import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.actor.typed.ActorRef
 import akka.actor.typed.Behavior
-import akka.actor.typed.eventstream.EventStream
 import akka.actor.typed.internal.routing.GroupRouterImpl
 import akka.actor.typed.internal.routing.RoutingLogics
 import akka.actor.typed.receptionist.Receptionist
 import akka.actor.typed.receptionist.ServiceKey
 import akka.actor.typed.scaladsl.adapter._
-import org.scalatest.Matchers
-import org.scalatest.WordSpecLike
 
 class RoutersSpec extends ScalaTestWithActorTestKit("""
     akka.loglevel=debug
-  """) with WordSpecLike with Matchers with LogCapturing {
+  """) with AnyWordSpecLike with Matchers with LogCapturing {
 
   // needed for the event filter
-  implicit val classicSystem = system.toClassic
+  implicit val classicSystem: ActorSystem = system.toClassic
 
   def compileOnlyApiCoverage(): Unit = {
     Routers.group(ServiceKey[String]("key")).withRandomRouting().withRoundRobinRouting()
 
-    Routers.pool(10)(() => Behaviors.empty[Any]).withRandomRouting()
-    Routers.pool(10)(() => Behaviors.empty[Any]).withRoundRobinRouting()
+    Routers.pool(10)(Behaviors.empty[Any]).withRandomRouting()
+    Routers.pool(10)(Behaviors.empty[Any]).withRoundRobinRouting()
+    Routers.pool(10)(Behaviors.empty[Any]).withConsistentHashingRouting(1, (msg: Any) => msg.toString)
   }
 
   "The router pool" must {
@@ -41,15 +41,14 @@ class RoutersSpec extends ScalaTestWithActorTestKit("""
       val childCounter = new AtomicInteger(0)
       case class Ack(msg: String, recipient: Int)
       val probe = createTestProbe[AnyRef]()
-      val pool = spawn(Routers.pool[String](4)(() =>
-        Behaviors.setup { _ =>
-          val id = childCounter.getAndIncrement()
-          probe.ref ! s"started $id"
-          Behaviors.receiveMessage { msg =>
-            probe.ref ! Ack(msg, id)
-            Behaviors.same
-          }
-        }))
+      val pool = spawn(Routers.pool[String](4)(Behaviors.setup { _ =>
+        val id = childCounter.getAndIncrement()
+        probe.ref ! s"started $id"
+        Behaviors.receiveMessage { msg =>
+          probe.ref ! Ack(msg, id)
+          Behaviors.same
+        }
+      }))
 
       // ordering of these msgs is not guaranteed
       val expectedStarted = (0 to 3).map { n =>
@@ -76,16 +75,15 @@ class RoutersSpec extends ScalaTestWithActorTestKit("""
 
     "keep routing to the rest of the children if some children stops" in {
       val probe = createTestProbe[String]()
-      val pool = spawn(Routers.pool[String](4)(() =>
-        Behaviors.receiveMessage {
-          case "stop" =>
-            Behaviors.stopped
-          case msg =>
-            probe.ref ! msg
-            Behaviors.same
-        }))
+      val pool = spawn(Routers.pool[String](4)(Behaviors.receiveMessage {
+        case "stop" =>
+          Behaviors.stopped
+        case msg =>
+          probe.ref ! msg
+          Behaviors.same
+      }))
 
-      LoggingEventFilter.debug("Pool child stopped").withOccurrences(2).intercept {
+      LoggingTestKit.debug("Pool child stopped").withOccurrences(2).expect {
         pool ! "stop"
         pool ! "stop"
       }
@@ -105,12 +103,11 @@ class RoutersSpec extends ScalaTestWithActorTestKit("""
 
     "stops if all children stops" in {
       val probe = createTestProbe()
-      val pool = spawn(Routers.pool[String](4)(() =>
-        Behaviors.receiveMessage { _ =>
-          Behaviors.stopped
-        }))
+      val pool = spawn(Routers.pool[String](4)(Behaviors.receiveMessage { _ =>
+        Behaviors.stopped
+      }))
 
-      LoggingEventFilter.info("Last pool child stopped, stopping pool").intercept {
+      LoggingTestKit.info("Last pool child stopped, stopping pool").expect {
         (0 to 3).foreach { _ =>
           pool ! "stop"
         }
@@ -152,13 +149,12 @@ class RoutersSpec extends ScalaTestWithActorTestKit("""
     "publish Dropped messages when there are no routees available" in {
       val serviceKey = ServiceKey[String]("group-routing-2")
       val group = spawn(Routers.group(serviceKey), "group-router-2")
-      val probe = TestProbe[Dropped]()
-      system.eventStream ! EventStream.Subscribe(probe.ref)
+      val probe = createDroppedMessageProbe()
 
       (0 to 3).foreach { n =>
         val msg = s"message-$n"
         group ! msg
-        probe.expectMessageType[Dropped]
+        probe.receiveMessage()
       }
 
       testKit.stop(group)
@@ -213,10 +209,10 @@ class RoutersSpec extends ScalaTestWithActorTestKit("""
     "not route to unreachable when there are reachable" in {
       val serviceKey = ServiceKey[String]("group-routing-4")
       val router = spawn(Behaviors.setup[String](context =>
-        new GroupRouterImpl(context, serviceKey, new RoutingLogics.RoundRobinLogic[String], true)))
+        new GroupRouterImpl(context, serviceKey, false, new RoutingLogics.RoundRobinLogic[String], true)))
 
-      val reachableProbe = createTestProbe[String]
-      val unreachableProbe = createTestProbe[String]
+      val reachableProbe = createTestProbe[String]()
+      val unreachableProbe = createTestProbe[String]()
       router
         .unsafeUpcast[Any] ! Receptionist.Listing(serviceKey, Set(reachableProbe.ref), Set(unreachableProbe.ref), false)
       router ! "one"
@@ -228,9 +224,9 @@ class RoutersSpec extends ScalaTestWithActorTestKit("""
     "route to unreachable when there are no reachable" in {
       val serviceKey = ServiceKey[String]("group-routing-4")
       val router = spawn(Behaviors.setup[String](context =>
-        new GroupRouterImpl(context, serviceKey, new RoutingLogics.RoundRobinLogic[String], true)))
+        new GroupRouterImpl(context, serviceKey, false, new RoutingLogics.RoundRobinLogic[String], true)))
 
-      val unreachableProbe = createTestProbe[String]
+      val unreachableProbe = createTestProbe[String]()
       router.unsafeUpcast[Any] ! Receptionist.Listing(
         serviceKey,
         Set.empty[ActorRef[String]],

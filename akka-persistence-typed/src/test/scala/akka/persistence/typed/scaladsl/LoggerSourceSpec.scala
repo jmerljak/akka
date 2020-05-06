@@ -1,31 +1,32 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.persistence.typed.scaladsl
 import java.util.concurrent.atomic.AtomicInteger
 
-import akka.actor.testkit.typed.scaladsl.LoggingEventFilter
-import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import org.scalatest.wordspec.AnyWordSpecLike
+import org.slf4j.event.Level
+
 import akka.actor.testkit.typed.scaladsl.LogCapturing
+import akka.actor.testkit.typed.scaladsl.LoggingTestKit
+import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
 import akka.persistence.typed.PersistenceId
 import akka.persistence.typed.RecoveryCompleted
 import akka.persistence.typed.SnapshotCompleted
 import akka.persistence.typed.SnapshotFailed
-import org.scalatest.WordSpecLike
-import org.slf4j.event.Level
 
 // Note that the spec name here is important since there are heuristics in place to avoid names
 // starting with EventSourcedBehavior
 class LoggerSourceSpec
     extends ScalaTestWithActorTestKit(EventSourcedBehaviorSpec.conf)
-    with WordSpecLike
+    with AnyWordSpecLike
     with LogCapturing {
 
   private val pidCounter = new AtomicInteger(0)
-  private def nextPid(): PersistenceId = PersistenceId(s"c${pidCounter.incrementAndGet()})")
+  private def nextPid(): PersistenceId = PersistenceId.ofUniqueId(s"c${pidCounter.incrementAndGet()})")
 
   def behavior: Behavior[String] = Behaviors.setup { ctx =>
     ctx.log.info("setting-up-behavior")
@@ -48,8 +49,8 @@ class LoggerSourceSpec
     // one test case leaks to another, the actual log class is what is tested in each individual case
 
     "log from setup" in {
-      LoggingEventFilter.info("recovery-completed").intercept {
-        eventFilterFor("setting-up-behavior").intercept {
+      LoggingTestKit.info("recovery-completed").expect {
+        eventFilterFor("setting-up-behavior").expect {
           spawn(behavior)
         }
       }
@@ -57,40 +58,57 @@ class LoggerSourceSpec
     }
 
     "log from recovery completed" in {
-      LoggingEventFilter.info("setting-up-behavior").intercept {
-        eventFilterFor("recovery-completed").intercept {
+      LoggingTestKit.info("setting-up-behavior").expect {
+        eventFilterFor("recovery-completed").expect {
           spawn(behavior)
         }
       }
     }
 
     "log from command handler" in {
-      LoggingEventFilter.empty
+      LoggingTestKit.empty
         .withLogLevel(Level.INFO)
         .withMessageRegex("(setting-up-behavior|recovery-completed|event-received)")
         .withOccurrences(3)
-        .intercept {
-          eventFilterFor("command-received").intercept {
+        .expect {
+          eventFilterFor("command-received").expect {
             spawn(behavior) ! "cmd"
           }
         }
     }
 
     "log from event handler" in {
-      LoggingEventFilter.empty
+      LoggingTestKit.empty
         .withLogLevel(Level.INFO)
         .withMessageRegex("(setting-up-behavior|recovery-completed|command-received)")
         .withOccurrences(3)
-        .intercept {
-          eventFilterFor("event-received").intercept {
+        .expect {
+          eventFilterFor("event-received").expect {
             spawn(behavior) ! "cmd"
           }
         }
     }
+
+    "use the user provided name" in {
+
+      val behavior: Behavior[String] = Behaviors.setup[String] { ctx =>
+        ctx.setLoggerName("my-custom-name")
+        EventSourcedBehavior[String, String, String](nextPid(), emptyState = "", commandHandler = (_, _) => {
+          ctx.log.info("command-received")
+          Effect.persist("evt")
+        }, eventHandler = (state, _) => state)
+      }
+
+      val actor = spawn(behavior)
+
+      LoggingTestKit.info("command-received").withLoggerName("my-custom-name").withOccurrences(1).expect {
+        actor ! "cmd"
+      }
+    }
   }
 
   def eventFilterFor(logMsg: String) =
-    LoggingEventFilter.custom { logEvent =>
+    LoggingTestKit.custom { logEvent =>
       logEvent.message == logMsg && logEvent.loggerName == classOf[LoggerSourceSpec].getName
     }
 

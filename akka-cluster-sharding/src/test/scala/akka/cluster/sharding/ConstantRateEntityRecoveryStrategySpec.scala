@@ -1,14 +1,14 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster.sharding
 
-import akka.cluster.sharding.ShardRegion.EntityId
-import akka.testkit.{ AkkaSpec, TimingTest }
-
 import scala.concurrent.{ Await, Future }
 import scala.concurrent.duration._
+
+import akka.cluster.sharding.ShardRegion.EntityId
+import akka.testkit.{ AkkaSpec, TimingTest }
 
 class ConstantRateEntityRecoveryStrategySpec extends AkkaSpec {
 

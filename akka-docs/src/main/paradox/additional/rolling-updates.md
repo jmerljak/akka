@@ -1,3 +1,6 @@
+---
+project.description: How to do rolling updates and restarts with Akka Cluster.
+---
 # Rolling Updates
 
 @@@ note
@@ -36,7 +39,7 @@ Additionally you can find advice on @ref:[Persistence - Schema Evolution](../per
 
 ## Cluster Sharding
 
-During a rolling upgrade, sharded entities receiving traffic may be moved during @ref:[shard rebalancing](../cluster-sharding.md#shard-rebalancing), 
+During a rolling upgrade, sharded entities receiving traffic may be moved during @ref:[shard rebalancing](../typed/cluster-sharding-concepts.md#shard-rebalancing), 
 to an old or new node in the cluster, based on the pluggable allocation strategy and settings.
 When an old node is stopped the shards that were running on it are moved to one of the
 other old nodes remaining in the cluster. The `ShardCoordinator` is itself a cluster singleton. 
@@ -55,7 +58,7 @@ overhead several times.
  
 ### Graceful shutdown 
 
-For rolling updates it is best to leave the Cluster gracefully via @ref:[Coordinated Shutdown](../actors.md#coordinated-shutdown),
+For rolling updates it is best to leave the Cluster gracefully via @ref:[Coordinated Shutdown](../coordinated-shutdown.md),
 which will run automatically on SIGTERM, when the Cluster node sees itself as `Exiting`.
 Environments such as Kubernetes send a SIGTERM, however if the JVM is wrapped with a script ensure that it forwards the signal.
 @ref:[Graceful shutdown](../cluster-sharding.md#graceful-shutdown) of Cluster Singletons and Cluster Sharding similarly happen automatically.
@@ -63,7 +66,7 @@ Environments such as Kubernetes send a SIGTERM, however if the JVM is wrapped wi
 ### Ungraceful shutdown 
 
 In case of network failures it may still be necessary to set the node's status to Down in order to complete the removal. 
-@ref:[Cluster Downing](../cluster-usage.md#downing) details downing nodes and downing providers. 
+@ref:[Cluster Downing](../typed/cluster.md#downing) details downing nodes and downing providers. 
 [Split Brain Resolver](https://doc.akka.io/docs/akka-enhancements/current/split-brain-resolver.html) can be used to ensure 
 the cluster continues to function during network partitions and node failures. For example
 if there is an unreachability problem Split Brain Resolver would make a decision based on the configured downing strategy. 
@@ -79,7 +82,7 @@ and ensure all nodes are in this state
 * Deploy again and with the new nodes set to `akka.cluster.configuration-compatibility-check.enforce-on-join = on`. 
   
 Full documentation about enforcing these checks on joining nodes and optionally adding custom checks can be found in  
-@ref:[Akka Cluster configuration compatibility checks](../cluster-usage.md#configuration-compatibility-check).
+@ref:[Akka Cluster configuration compatibility checks](../typed/cluster.md#configuration-compatibility-check).
 
 ## Rolling Updates and Migrating Akka
 
@@ -92,7 +95,7 @@ without bringing down the entire cluster.
 The procedure for changing from Java serialization to Jackson would look like:
 
 1. Rolling update from 2.5.24 (or later) to 2.6.0
-    * Use config `allow-java-serialization=on`.
+    * Use config `akka.actor.allow-java-serialization=on`.
     * Roll out the change.
     * Java serialization will be used as before.
     * This step is optional and you could combine it with next step if you like, but could be good to
@@ -101,18 +104,22 @@ The procedure for changing from Java serialization to Jackson would look like:
     * Change message classes by adding the marker interface and possibly needed annotations as
       described in @ref:[Serialization with Jackson](../serialization-jackson.md).
     * Test the system with the new serialization in a new test cluster (no rolling update).
-    * Remove the binding for the marker interface, so that Jackson is not used for serialization yet.
+    * Remove the binding for the marker interface in `akka.actor.serialization-bindings`, so that Jackson is not used for serialization (toBinary) yet.
+    * Configure `akka.serialization.jackson.whitelist-class-prefix=["com.myapp"]`
+        * This is needed for Jackson deserialization when the `serialization-bindings` isn't defined.
+        * Replace `com.myapp` with the name of the root package of your application to trust all classes.
     * Roll out the change.
     * Java serialization is still used, but this version is prepared for next roll out.
 1. Rolling update to enable serialization with Jackson.
-    * Add the binding to the marker interface to the Jackson serializer.
+    * Add the binding to the marker interface in `akka.actor.serialization-bindings` to the Jackson serializer.
+    * Remove `akka.serialization.jackson.whitelist-class-prefix`.
     * Roll out the change.
     * Old nodes will still send messages with Java serialization, and that can still be deserialized by new nodes.
     * New nodes will send messages with Jackson serialization, and old node can deserialize those because they were
       prepared in previous roll out.
 1. Rolling update to disable Java serialization
     * Remove `allow-java-serialization` config, to use the default `allow-java-serialization=off`.
-    * Remove `.warn-about-java-serializer-usage` config if you had changed that, to use the default `.warn-about-java-serializer-usage=on`.
+    * Remove `warn-about-java-serializer-usage` config if you had changed that, to use the default `warn-about-java-serializer-usage=on`. 
     * Roll out the change.
     
 A similar approach can be used when changing between other serializers, for example between Jackson and Protobuf.    
@@ -137,7 +144,7 @@ If you need to change any of the following aspects of sharding it will require a
  
 ### Migrating from PersistentFSM to EventSourcedBehavior
 
-If you've [migrated from `PersistentFSM` to `EventSourcedBehavior`](../persistence-fsm.md#migration-to-eventsourcedbehavior)
+If you've @ref:[migrated from `PersistentFSM` to `EventSourcedBehavior`](../persistence-fsm.md#migration-to-eventsourcedbehavior)
 and are using PersistenceFSM with Cluster Sharding, a full shutdown is required as shards can move between new and old nodes.
   
 ### Migrating from classic remoting to Artery
@@ -146,3 +153,12 @@ If you've migrated from classic remoting to Artery
 which has a completely different protocol, a rolling update is not supported.
 For more details on this migration
 see @ref:[the migration guide](../project/migration-guide-2.5.x-2.6.x.md#migrating-from-classic-remoting-to-artery).
+
+### Changing remoting transport
+
+Rolling update is not supported when @ref:[changing the remoting transport](../remoting-artery.md#selecting-a-transport).
+
+### Migrating from Classic Sharding to Typed Sharding
+
+If you have been using classic sharding it is possible to do a rolling upgrade to typed sharding using a 3 step procedure.
+The steps along with example commits are detailed in [this sample PR](https://github.com/akka/akka-samples/pull/110) 

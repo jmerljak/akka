@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.serialization
@@ -236,7 +236,7 @@ trait BaseSerializer extends Serializer {
   /**
    * Globally unique serialization identifier configured in the `reference.conf`.
    *
-   * See [[Serializer#identifier]].
+   * See [[Serializer.identifier]].
    */
   override val identifier: Int = identifierFromConfig
 

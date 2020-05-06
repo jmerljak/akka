@@ -1,13 +1,14 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.persistence.typed.internal
 
 import akka.actor.typed.Behavior
 import akka.actor.typed.internal.PoisonPill
-import akka.actor.typed.scaladsl.Behaviors
-import akka.annotation.InternalApi
+import akka.actor.typed.scaladsl.{ ActorContext, Behaviors }
+import akka.annotation.{ InternalApi, InternalStableApi }
+import akka.util.unused
 
 /**
  * INTERNAL API
@@ -33,6 +34,8 @@ private[akka] class RequestingRecoveryPermit[C, E, S](override val setup: Behavi
     with JournalInteractions[C, E, S]
     with SnapshotInteractions[C, E, S] {
 
+  onRequestingRecoveryPermit(setup.context)
+
   def createBehavior(): Behavior[InternalProtocol] = {
     // request a permit, as only once we obtain one we can start replaying
     requestRecoveryPermit()
@@ -50,7 +53,6 @@ private[akka] class RequestingRecoveryPermit[C, E, S](override val setup: Behavi
               Behaviors.unhandled
             } else {
               stashInternal(other)
-              Behaviors.same
             }
 
         }
@@ -58,12 +60,15 @@ private[akka] class RequestingRecoveryPermit[C, E, S](override val setup: Behavi
           case (_, PoisonPill) =>
             stay(receivedPoisonPill = true)
           case (_, signal) =>
-            setup.onSignal(setup.emptyState, signal, catchAndLog = true)
-            Behaviors.same
+            if (setup.onSignal(setup.emptyState, signal, catchAndLog = true)) Behaviors.same
+            else Behaviors.unhandled
         }
     }
     stay(receivedPoisonPill = false)
   }
+
+  @InternalStableApi
+  def onRequestingRecoveryPermit(@unused context: ActorContext[_]): Unit = ()
 
   private def becomeReplaying(receivedPoisonPill: Boolean): Behavior[InternalProtocol] = {
     setup.log.debug(s"Initializing snapshot recovery: {}", setup.recovery)

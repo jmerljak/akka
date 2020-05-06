@@ -1,8 +1,13 @@
+---
+project.description: The Actor model, managing internal state and changing behavior in Akka Actors.
+---
 # Introduction to Actors
 
-## Dependency
+For the Akka Classic documentation of this feature see @ref:[Classic Actors](../actors.md).
 
-To use Akka Actor Typed, you must add the following dependency in your project:
+## Module info
+
+To use Akka Actors, add the following dependency in your project:
 
 @@dependency[sbt,Maven,Gradle] {
   group=com.typesafe.akka
@@ -10,13 +15,34 @@ To use Akka Actor Typed, you must add the following dependency in your project:
   version=$akka.version$
 }
 
+Both the Java and Scala DSLs of Akka modules are bundled in the same JAR. For a smooth development experience,
+when using an IDE such as Eclipse or IntelliJ, you can disable the auto-importer from suggesting `javadsl`
+imports when working in Scala, or viceversa. See @ref:[IDE Tips](../additional/ide.md). 
+
+@@project-info{ projectId="akka-actor-typed" }
+
+## Akka Actors
+
+The [Actor Model](http://en.wikipedia.org/wiki/Actor_model) provides a higher level of abstraction for writing concurrent
+and distributed systems. It alleviates the developer from having to deal with
+explicit locking and thread management, making it easier to write correct
+concurrent and parallel systems. Actors were defined in the 1973 paper by Carl
+Hewitt but have been popularized by the Erlang language, and used for example at
+Ericsson with great success to build highly concurrent and reliable telecom
+systems. The API of Akka’s Actors has borrowed some of its syntax from Erlang.
+ 
 ## First example
 
 If you are new to Akka you might want to start with reading the @ref:[Getting Started Guide](guide/introduction.md)
-and then come back here to learn more.
+and then come back here to learn more. We also recommend watching the short 
+[introduction video to Akka actors](https://akka.io/blog/news/2019/12/03/akka-typed-actor-intro-video).  
+
+It is helpful to become familiar with the foundational, external and internal
+ecosystem of your Actors, to see what you can leverage and customize as needed, see
+@ref:[Actor Systems](../general/actor-systems.md) and @ref:[Actor References, Paths and Addresses](../general/addressing.md).
 
 As discussed in @ref:[Actor Systems](../general/actor-systems.md) Actors are about
-sending messages between independent units of computation, but how does that
+sending messages between independent units of computation, but what does that
 look like?
 
 In all of the following these imports are assumed:
@@ -29,6 +55,8 @@ Java
 
 With these in place we can define our first Actor, and it will say
 hello!
+
+![hello-world1.png](./images/hello-world1.png)
 
 Scala
 :  @@snip [IntroSpec.scala](/akka-actor-typed-tests/src/test/scala/docs/akka/typed/IntroSpec.scala) { #hello-world-actor }
@@ -53,9 +81,8 @@ the next behavior is "the same as the current one".
 The type of the messages handled by this behavior is declared to be of class
 `Greet`@java[.]@scala[, meaning that `message` argument is also typed as such.
 This is why we can access the `whom` and `replyTo` members without needing to use a pattern match.]
-Typically, an actor handles more than one specific message type and then there
-is one common @scala[`trait`]@java[`interface`] that all messages that the
-actor can handle @scala[`extends`]@java[`implements`].
+Typically, an actor handles more than one specific message type where all of them
+directly or indirectly @scala[`extend`]@java[`implement`] a common @scala[`trait`]@java[`interface`].
 
 On the last line we see the `HelloWorld` Actor send a message to another
 Actor, which is done using the @scala[`!` operator (pronounced “bang” or “tell”)]@java[`tell` method].
@@ -71,11 +98,13 @@ protocol but Actors can model arbitrarily complex protocols when needed. The
 protocol is bundled together with the behavior that implements it in a nicely
 wrapped scope—the `HelloWorld` @scala[object]@java[class].
 
-As Carl Hewitt said, one Actor is no Actor—it would be quite lonely with
+As Carl Hewitt said, one Actor is no Actor — it would be quite lonely with
 nobody to talk to. We need another Actor that interacts with the `Greeter`.
 Let's make a `HelloWorldBot` that receives the reply from the `Greeter` and sends a number
 of additional greeting messages and collect the replies until a given max number
 of messages have been reached.
+
+![hello-world2.png](./images/hello-world2.png)
 
 Scala
 :  @@snip [IntroSpec.scala](/akka-actor-typed-tests/src/test/scala/docs/akka/typed/IntroSpec.scala) { #hello-world-bot }
@@ -104,7 +133,7 @@ Scala
 Java
 :  @@snip [IntroSpec.scala](/akka-actor-typed-tests/src/test/java/jdocs/akka/typed/IntroTest.java) { #hello-world }
 
-We start an Actor system from the defined `HelloWorldMain` behavior and send two `Start` messages that
+We start an Actor system from the defined `HelloWorldMain` behavior and send two `SayHello` messages that
 will kick-off the interaction between two separate `HelloWorldBot` actors and the single `Greeter` actor.
 
 An application normally consists of a single `ActorSystem`, running many actors, per JVM. 
@@ -126,6 +155,8 @@ The console output may look like this:
 [INFO] [03/13/2018 15:50:05.816] [hello-akka.actor.default-dispatcher-6] [akka://hello/user/Akka] Greeting 3 for Akka
 ```
 
+You will also need to add a @ref:[logging dependency](logging.md) to see that output when running.
+
 @@@ div { .group-scala }
 
 #### Here is another example that you can edit and run in the browser:
@@ -142,7 +173,9 @@ The next example is more realistic and demonstrates some important patterns:
 * Using @scala[a sealed trait and case class/objects]@java[an interface and classes implementing that interface] to represent multiple messages an actor can receive
 * Handle sessions by using child actors
 * Handling state by changing behavior
-* Using multiple typed actors to represent different parts of a protocol in a type safe way
+* Using multiple actors to represent different parts of a protocol in a type safe way
+
+![chat-room.png](./images/chat-room.png)
 
 ### Functional Style
 
@@ -241,8 +274,8 @@ alternatively to `SessionGranted` we may also receive a
 @@@
 
 Now to try things out we must start both a chat room and a gabbler and of
-course we do this inside an Actor system. Since there can be only one guardian
-supervisor we could either start the chat room from the gabbler (which we don’t
+course we do this inside an Actor system. Since there can be only one user guardian
+we could either start the chat room from the gabbler (which we don’t
 want—it complicates its logic) or the gabbler from the chat room (which is
 nonsensical) or we start both of them from a third Actor—our only sensible
 choice:
@@ -385,8 +418,8 @@ Java
 :  @@snip [OOIntroTest.java](/akka-actor-typed-tests/src/test/java/jdocs/akka/typed/OOIntroTest.java) {  #chatroom-gabbler }
 
 Now to try things out we must start both a chat room and a gabbler and of
-course we do this inside an Actor system. Since there can be only one guardian
-supervisor we could either start the chat room from the gabbler (which we don’t
+course we do this inside an Actor system. Since there can be only one user guardian
+we could either start the chat room from the gabbler (which we don’t
 want—it complicates its logic) or the gabbler from the chat room (which is
 nonsensical) or we start both of them from a third Actor—our only sensible
 choice:

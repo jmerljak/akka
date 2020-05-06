@@ -1,22 +1,22 @@
 /*
- * Copyright (C) 2015-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2015-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.impl.fusing
 
-import akka.actor.ActorRef
-import akka.event.LoggingAdapter
-import akka.stream.stage._
-import akka.stream._
 import java.util.concurrent.ThreadLocalRandom
-
-import akka.Done
-import akka.annotation.{ InternalApi, InternalStableApi }
 
 import scala.concurrent.Promise
 import scala.util.control.NonFatal
+
+import akka.Done
+import akka.actor.ActorRef
+import akka.annotation.{ InternalApi, InternalStableApi }
+import akka.event.LoggingAdapter
+import akka.stream._
 import akka.stream.Attributes.LogLevels
 import akka.stream.snapshot._
+import akka.stream.stage._
 
 /**
  * INTERNAL API
@@ -133,12 +133,12 @@ import akka.stream.snapshot._
  * From an external viewpoint, the GraphInterpreter takes an assembly of graph processing stages encoded as a
  * [[GraphInterpreter#GraphAssembly]] object and provides facilities to execute and interact with this assembly.
  * The lifecycle of the Interpreter is roughly the following:
- *  - [[init()]] is called
- *  - [[execute()]] is called whenever there is need for execution, providing an upper limit on the processed events
- *  - [[finish()]] is called before the interpreter is disposed, preferably after [[isCompleted]] returned true, although
+ *  - [[init]] is called
+ *  - [[execute]] is called whenever there is need for execution, providing an upper limit on the processed events
+ *  - [[finish]] is called before the interpreter is disposed, preferably after [[isCompleted]] returned true, although
  *    in abort cases this is not strictly necessary
  *
- * The [[execute()]] method of the interpreter accepts an upper bound on the events it will process. After this limit
+ * The [[execute]] method of the interpreter accepts an upper bound on the events it will process. After this limit
  * is reached or there are no more pending events to be processed, the call returns. It is possible to inspect
  * if there are unprocessed events left via the [[isSuspended]] method. [[isCompleted]] returns true once all operators
  * reported completion inside the interpreter.
@@ -690,8 +690,8 @@ import akka.stream.snapshot._
         logicSnapshots(logicIndexes(connection.inOwner)),
         logicSnapshots(logicIndexes(connection.outOwner)),
         connection.portState match {
-          case InReady                                                     => ConnectionSnapshot.ShouldPull
-          case OutReady                                                    => ConnectionSnapshot.ShouldPush
+          case InReady | Pushing                                           => ConnectionSnapshot.ShouldPull
+          case OutReady | Pulling                                          => ConnectionSnapshot.ShouldPush
           case x if (x & (InClosed | OutClosed)) == (InClosed | OutClosed) =>
             // At least one side of the connection is closed: we show it as closed
             ConnectionSnapshot.Closed

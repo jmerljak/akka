@@ -1,20 +1,24 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.io.dns.internal
 
 import java.net.InetAddress
 
-import akka.io.Dns
-import akka.io.dns.AAAARecord
-import akka.io.dns.DnsProtocol.{ Resolve, Resolved }
-import akka.io.dns.CachePolicy.Ttl
-import akka.testkit.WithLogCapturing
-import akka.testkit.{ AkkaSpec, ImplicitSender }
-
 import scala.collection.immutable.Seq
 
+import com.github.ghik.silencer.silent
+
+import akka.io.Dns
+import akka.io.dns.AAAARecord
+import akka.io.dns.CachePolicy.Ttl
+import akka.io.dns.DnsProtocol.{ Resolve, Resolved }
+import akka.testkit.{ AkkaSpec, ImplicitSender }
+import akka.testkit.WithLogCapturing
+
+// tests deprecated DNS API
+@silent("deprecated")
 class AsyncDnsManagerSpec extends AkkaSpec("""
     akka.loglevel = DEBUG
     akka.loggers = ["akka.testkit.SilenceAllTestEventListener"]
@@ -45,7 +49,7 @@ class AsyncDnsManagerSpec extends AkkaSpec("""
 
     "provide access to cache" in {
       dns ! AsyncDnsManager.GetCache
-      (expectMsgType[AsyncDnsCache] should be).theSameInstanceAs(Dns(system).cache)
+      (expectMsgType[akka.io.SimpleDnsCache] should be).theSameInstanceAs(Dns(system).cache)
     }
   }
 

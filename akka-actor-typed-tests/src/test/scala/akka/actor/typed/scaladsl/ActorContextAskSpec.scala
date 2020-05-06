@@ -1,21 +1,22 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed.scaladsl
 
-import akka.actor.typed.{ ActorRef, PostStop, Props }
-import akka.actor.testkit.typed.scaladsl.TestProbe
-import com.typesafe.config.ConfigFactory
 import scala.concurrent.TimeoutException
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
 import scala.util.{ Failure, Success }
 
-import akka.actor.testkit.typed.scaladsl.LoggingEventFilter
-import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import com.typesafe.config.ConfigFactory
+import org.scalatest.wordspec.AnyWordSpecLike
+
 import akka.actor.testkit.typed.scaladsl.LogCapturing
-import org.scalatest.WordSpecLike
+import akka.actor.testkit.typed.scaladsl.LoggingTestKit
+import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import akka.actor.testkit.typed.scaladsl.TestProbe
+import akka.actor.typed.{ ActorRef, PostStop, Props }
 
 object ActorContextAskSpec {
   val config = ConfigFactory.parseString("""
@@ -32,7 +33,7 @@ object ActorContextAskSpec {
 
 class ActorContextAskSpec
     extends ScalaTestWithActorTestKit(ActorContextAskSpec.config)
-    with WordSpecLike
+    with AnyWordSpecLike
     with LogCapturing {
 
   "The Scala DSL ActorContext" must {
@@ -104,7 +105,7 @@ class ActorContextAskSpec
           }
       }
 
-      LoggingEventFilter.error[NotImplementedError].withMessageContains("Pong").intercept {
+      LoggingTestKit.error[NotImplementedError].withMessageContains("Pong").expect {
         spawn(snitch)
       }
 
@@ -154,6 +155,37 @@ class ActorContextAskSpec
       exc.getMessage should include(target.path.toString)
       exc.getMessage should include("[java.lang.String]") // message class
       exc.getMessage should include("[10 ms]") // timeout
+    }
+
+    "receive replies in same order as sent" in {
+      case class Ping(n: Int, replyTo: ActorRef[Pong])
+      case class Pong(n: Int)
+
+      val N = 100
+      val probe = TestProbe[Pong]()
+
+      val pingPong = spawn(Behaviors.receiveMessage[Ping] { message =>
+        message.replyTo ! Pong(message.n)
+        Behaviors.same
+      })
+
+      val snitch = Behaviors.setup[Pong] { context =>
+        (1 to N).foreach { n =>
+          context.ask[Ping, Pong](pingPong, Ping(n, _)) {
+            case Success(pong) => pong
+            case Failure(ex)   => throw ex
+          }
+        }
+
+        Behaviors.receiveMessage { pong =>
+          probe.ref ! pong
+          Behaviors.same
+        }
+      }
+
+      spawn(snitch)
+
+      probe.receiveMessages(N).map(_.n) should ===(1 to N)
     }
 
   }

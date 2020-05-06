@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster.typed;
@@ -10,7 +10,7 @@ import akka.actor.testkit.typed.javadsl.TestProbe;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 import org.junit.Test;
-import org.scalatest.junit.JUnitSuite;
+import org.scalatestplus.junit.JUnitSuite;
 
 import java.util.concurrent.TimeUnit;
 
@@ -26,10 +26,7 @@ public class ClusterApiTest extends JUnitSuite {
                 + "akka.remote.artery.canonical.hostname = 127.0.0.1 \n"
                 + "akka.cluster.jmx.multi-mbeans-in-same-jvm = on \n"
                 + "akka.coordinated-shutdown.terminate-actor-system = off \n"
-                + "akka.coordinated-shutdown.run-by-actor-system-terminate = off \n"
-                + "akka.actor { \n"
-                + "  serialize-messages = off \n"
-                + "}");
+                + "akka.coordinated-shutdown.run-by-actor-system-terminate = off \n");
 
     ActorSystem<?> system1 =
         ActorSystem.wrap(akka.actor.ActorSystem.create("ClusterApiTest", config));

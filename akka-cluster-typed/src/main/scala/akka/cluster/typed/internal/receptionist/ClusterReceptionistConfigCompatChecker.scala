@@ -1,12 +1,13 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster.typed.internal.receptionist
 
+import com.typesafe.config.Config
+
 import akka.annotation.InternalApi
 import akka.cluster.{ ConfigValidation, JoinConfigCompatChecker, Valid }
-import com.typesafe.config.Config
 
 /**
  * INTERNAL API
@@ -14,7 +15,7 @@ import com.typesafe.config.Config
  * Verifies that receptionist distributed-key-count are the same across cluster nodes
  */
 @InternalApi
-final class ClusterReceptionistConfigCompatChecker extends JoinConfigCompatChecker {
+private[akka] final class ClusterReceptionistConfigCompatChecker extends JoinConfigCompatChecker {
 
   override def requiredKeys = "akka.cluster.typed.receptionist.distributed-key-count" :: Nil
 

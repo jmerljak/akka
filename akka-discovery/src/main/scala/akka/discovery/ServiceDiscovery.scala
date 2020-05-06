@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.discovery
@@ -13,10 +13,19 @@ import scala.collection.immutable
 import scala.compat.java8.OptionConverters._
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
+
 import akka.actor.{ DeadLetterSuppression, NoSerializationVerificationNeeded }
 import akka.util.HashCode
 
 object ServiceDiscovery {
+
+  /**
+   * Future returned by resolve(name, timeout) should be failed with this exception
+   * if the underlying mechanism was unable to resolve the name within the given timeout.
+   *
+   * It is up to each implementation to implement timeouts.
+   */
+  final class DiscoveryTimeoutException(reason: String) extends RuntimeException(reason)
 
   object Resolved {
     def apply(serviceName: String, addresses: immutable.Seq[ResolvedTarget]): Resolved =
@@ -281,6 +290,7 @@ abstract class ServiceDiscovery {
    *
    * @param lookup       A service discovery lookup.
    * @param resolveTimeout Timeout. Up to the discovery-method to adhere to his
+   * @return Resolved future should be failed with a [DiscoveryTimeoutException] if the `resolveTimeout` is exceeded.
    */
   def lookup(lookup: Lookup, resolveTimeout: FiniteDuration): Future[Resolved]
 
@@ -299,7 +309,7 @@ abstract class ServiceDiscovery {
    * the passed `resolveTimeout` should never be exceeded, as it signals the application's
    * eagerness to wait for a result for this specific lookup.
    *
-   * The returned future SHOULD be failed once resolveTimeout has passed.
+   * The returned future should be failed once resolveTimeout has passed with a [[DiscoveryTimeoutException]].
    *
    */
   def lookup(query: Lookup, resolveTimeout: java.time.Duration): CompletionStage[Resolved] = {
@@ -311,7 +321,8 @@ abstract class ServiceDiscovery {
    * Java API
    *
    * @param serviceName           A name, see discovery-method's docs for how this is interpreted
-   * @param resolveTimeout Timeout. Up to the discovery-methodto adhere to his
+   * @param resolveTimeout Timeout. Up to the discovery-method to adhere to this and complete the CompletionStage with a
+   *                                [DiscoveryTimeoutException]
    */
   def lookup(serviceName: String, resolveTimeout: java.time.Duration): CompletionStage[Resolved] =
     lookup(Lookup(serviceName), resolveTimeout)

@@ -1,14 +1,14 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed
 package scaladsl
 
-import akka.annotation.{ DoNotInherit, InternalApi }
-import akka.actor.typed.internal._
-
 import scala.reflect.{ classTag, ClassTag }
+
+import akka.actor.typed.internal._
+import akka.annotation.{ DoNotInherit, InternalApi }
 
 /**
  * Factories for [[akka.actor.typed.Behavior]].
@@ -30,7 +30,7 @@ object Behaviors {
     BehaviorImpl.DeferredBehavior(factory)
 
   /**
-   * Support for stashing messages to unstash at a later timej.
+   * Support for stashing messages to unstash at a later time.
    */
   def withStash[T](capacity: Int)(factory: StashBuffer[T] => Behavior[T]): Behavior[T] =
     setup(ctx => {
@@ -122,8 +122,6 @@ object Behaviors {
 
   /**
    * Construct an actor `Behavior` from a partial message handler which treats undefined messages as unhandled.
-   *
-   * Behaviors can also be composed with [[Behavior#orElse]].
    */
   def receivePartial[T](onMessage: PartialFunction[(ActorContext[T], T), Behavior[T]]): Receive[T] =
     Behaviors.receive[T] { (ctx, t) =>
@@ -132,8 +130,6 @@ object Behaviors {
 
   /**
    * Construct an actor `Behavior` from a partial message handler which treats undefined messages as unhandled.
-   *
-   * Behaviors can also be composed with [[Behavior#orElse]].
    */
   def receiveMessagePartial[T](onMessage: PartialFunction[T, Behavior[T]]): Receive[T] =
     Behaviors.receive[T] { (_, t) =>

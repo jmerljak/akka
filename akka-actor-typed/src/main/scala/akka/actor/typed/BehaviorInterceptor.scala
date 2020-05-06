@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed
@@ -86,7 +86,7 @@ abstract class BehaviorInterceptor[Outer, Inner](val interceptMessageClass: Clas
 object BehaviorInterceptor {
 
   /**
-   * Abstraction of passing the on further in the behavior stack in [[BehaviorInterceptor#preStart]].
+   * Abstraction of passing the on further in the behavior stack in [[BehaviorInterceptor#aroundStart]].
    *
    * Not for user extension
    */

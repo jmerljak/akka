@@ -1,13 +1,13 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.io
 
-import java.nio.channels.DatagramChannel
 import java.net.DatagramSocket
 import java.net.ServerSocket
 import java.net.Socket
+import java.nio.channels.DatagramChannel
 
 import akka.util.unused
 

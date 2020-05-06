@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package jdocs.akka.typed;
@@ -45,7 +45,11 @@ public class BubblingSample {
   public static class Worker extends AbstractBehavior<Protocol.Command> {
 
     public static Behavior<Protocol.Command> create() {
-      return Behaviors.setup(context -> new Worker());
+      return Behaviors.setup(Worker::new);
+    }
+
+    private Worker(ActorContext<Protocol.Command> context) {
+      super(context);
     }
 
     @Override
@@ -72,11 +76,10 @@ public class BubblingSample {
       return Behaviors.setup(MiddleManagement::new);
     }
 
-    private final ActorContext<Protocol.Command> context;
     private final ActorRef<Protocol.Command> child;
 
     private MiddleManagement(ActorContext<Protocol.Command> context) {
-      this.context = context;
+      super(context);
 
       context.getLog().info("Middle management starting up");
       // default supervision of child, meaning that it will stop on failure
@@ -91,7 +94,7 @@ public class BubblingSample {
     public Receive<Protocol.Command> createReceive() {
       // here we don't handle Terminated at all which means that
       // when the child fails or stops gracefully this actor will
-      // fail with a DeathWatchException
+      // fail with a DeathPactException
       return newReceiveBuilder().onMessage(Protocol.Command.class, this::onCommand).build();
     }
 
@@ -109,11 +112,10 @@ public class BubblingSample {
           .onFailure(DeathPactException.class, SupervisorStrategy.restart());
     }
 
-    private final ActorContext<Protocol.Command> context;
     private final ActorRef<Protocol.Command> middleManagement;
 
     private Boss(ActorContext<Protocol.Command> context) {
-      this.context = context;
+      super(context);
       context.getLog().info("Boss starting up");
       // default supervision of child, meaning that it will stop on failure
       middleManagement = context.spawn(MiddleManagement.create(), "middle-management");
@@ -123,7 +125,7 @@ public class BubblingSample {
     @Override
     public Receive<Protocol.Command> createReceive() {
       // here we don't handle Terminated at all which means that
-      // when middle management fails with a DeathWatchException
+      // when middle management fails with a DeathPactException
       // this actor will also fail
       return newReceiveBuilder().onMessage(Protocol.Command.class, this::onCommand).build();
     }

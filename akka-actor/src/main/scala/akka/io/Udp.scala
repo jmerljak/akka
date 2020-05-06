@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.io
@@ -7,15 +7,16 @@ package akka.io
 import java.net.DatagramSocket
 import java.net.InetSocketAddress
 
+import scala.collection.immutable
+
+import com.github.ghik.silencer.silent
 import com.typesafe.config.Config
 
-import scala.collection.immutable
-import akka.io.Inet.{ SoJavaFactories, SocketOption }
-import akka.util.Helpers.Requiring
-import akka.util.ByteString
 import akka.actor._
+import akka.io.Inet.{ SoJavaFactories, SocketOption }
+import akka.util.ByteString
+import akka.util.Helpers.Requiring
 import akka.util.ccompat._
-import com.github.ghik.silencer.silent
 
 /**
  * UDP Extension for Akka’s IO layer.
@@ -40,6 +41,7 @@ object Udp extends ExtensionId[UdpExt] with ExtensionIdProvider {
    * Java API: retrieve the Udp extension for the given system.
    */
   override def get(system: ActorSystem): UdpExt = super.get(system)
+  override def get(system: ClassicActorSystemProvider): UdpExt = super.get(system)
 
   /**
    * The common interface for [[Command]] and [[Event]].
@@ -243,8 +245,10 @@ class UdpExt(system: ExtendedActorSystem) extends IO.Extension {
  * Java API: factory methods for the message types used when communicating with the Udp service.
  */
 object UdpMessage {
-  import Udp._
   import java.lang.{ Iterable => JIterable }
+
+  import Udp._
+
   import akka.util.ccompat.JavaConverters._
 
   /**

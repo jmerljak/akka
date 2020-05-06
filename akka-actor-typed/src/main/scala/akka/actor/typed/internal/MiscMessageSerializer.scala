@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed.internal
@@ -12,8 +12,10 @@ import akka.actor.typed.scaladsl.adapter._
 import akka.annotation.InternalApi
 import akka.serialization.{ BaseSerializer, SerializerWithStringManifest }
 
-@InternalApi
-class MiscMessageSerializer(val system: akka.actor.ExtendedActorSystem)
+/**
+ * INTERNAL API
+ */
+@InternalApi private[akka] final class MiscMessageSerializer(val system: akka.actor.ExtendedActorSystem)
     extends SerializerWithStringManifest
     with BaseSerializer {
 

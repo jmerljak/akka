@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2014-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package docs.akka.typed
@@ -7,12 +7,11 @@ package docs.akka.typed
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
 import scala.concurrent.duration._
-
 import akka.actor.testkit.typed.scaladsl.ActorTestKit
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.actor.testkit.typed.scaladsl.LogCapturing
 import docs.akka.typed.IntroSpec.HelloWorld
-import org.scalatest.WordSpecLike
+import org.scalatest.wordspec.AnyWordSpecLike
 import com.github.ghik.silencer.silent
 
 //#imports1
@@ -28,7 +27,6 @@ import akka.actor.typed.ActorRef
 import akka.actor.typed.ActorSystem
 import akka.actor.typed.Props
 import akka.util.Timeout
-import akka.actor.typed.Scheduler
 
 //#imports2
 
@@ -49,7 +47,7 @@ object SpawnProtocolDocSpec {
   //#main
 }
 
-class SpawnProtocolDocSpec extends ScalaTestWithActorTestKit with WordSpecLike with LogCapturing {
+class SpawnProtocolDocSpec extends ScalaTestWithActorTestKit with AnyWordSpecLike with LogCapturing {
 
   import SpawnProtocolDocSpec._
 
@@ -57,14 +55,13 @@ class SpawnProtocolDocSpec extends ScalaTestWithActorTestKit with WordSpecLike w
     "be able to spawn actors" in {
       //#system-spawn
 
-      val system: ActorSystem[SpawnProtocol.Command] =
+      implicit val system: ActorSystem[SpawnProtocol.Command] =
         ActorSystem(HelloWorldMain(), "hello")
 
       // needed in implicit scope for ask (?)
       import akka.actor.typed.scaladsl.AskPattern._
       implicit val ec: ExecutionContext = system.executionContext
       implicit val timeout: Timeout = Timeout(3.seconds)
-      implicit val scheduler: Scheduler = system.scheduler
 
       val greeter: Future[ActorRef[HelloWorld.Greet]] =
         system.ask(SpawnProtocol.Spawn(behavior = HelloWorld(), name = "greeter", props = Props.empty, _))

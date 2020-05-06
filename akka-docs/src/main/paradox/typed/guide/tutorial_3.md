@@ -51,8 +51,8 @@ But to further understand the need for flexibility in the protocol, it will help
 
 The following sections discuss this behavior in more detail:
 
-* [Message delivery](#message-delivery)
-* [Message ordering](#message-ordering)
+* @ref:[Message delivery](#message-delivery)
+* @ref:[Message ordering](#message-ordering)
 
 ### Message delivery
 The delivery semantics provided by messaging subsystems typically fall into the following categories:
@@ -138,7 +138,7 @@ Note in the code that:
 
 ## Testing the actor
 
-Based on the actor above, we could write a test. In the `com.lightbend.akka.sample` package in the test tree of your project, add the following code to a @scala[`DeviceSpec.scala`]@java[`DeviceTest.java`] file.
+Based on the actor above, we could write a test. In the `com.example` package in the test tree of your project, add the following code to a @scala[`DeviceSpec.scala`]@java[`DeviceTest.java`] file.
 @scala[(We use ScalaTest but any other test framework can be used with the Akka Testkit)].
 
 You can run this test @scala[by running `test` at the sbt prompt]@java[by running `mvn test`].

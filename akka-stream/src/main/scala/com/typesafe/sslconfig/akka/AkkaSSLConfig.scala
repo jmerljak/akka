@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2015-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package com.typesafe.sslconfig.akka
@@ -7,20 +7,23 @@ package com.typesafe.sslconfig.akka
 import java.security.KeyStore
 import java.security.cert.CertPathValidatorException
 import java.util.Collections
-import javax.net.ssl._
 
-import akka.actor._
-import akka.event.Logging
 import com.typesafe.sslconfig.akka.util.AkkaLoggerFactory
 import com.typesafe.sslconfig.ssl._
 import com.typesafe.sslconfig.util.LoggerFactory
+import javax.net.ssl._
 
-// TODO: remove again in 2.5.x, see https://github.com/akka/akka/issues/21753
+import akka.actor._
+import akka.annotation.InternalApi
+import akka.event.Logging
+
+@deprecated("Use Tcp and TLS with SSLEngine parameters instead. Setup the SSLEngine with needed parameters.", "2.6.0")
 object AkkaSSLConfig extends ExtensionId[AkkaSSLConfig] with ExtensionIdProvider {
 
   //////////////////// EXTENSION SETUP ///////////////////
 
   override def get(system: ActorSystem): AkkaSSLConfig = super.get(system)
+  override def get(system: ClassicActorSystemProvider): AkkaSSLConfig = super.get(system)
   def apply()(implicit system: ActorSystem): AkkaSSLConfig = super.apply(system)
 
   override def lookup() = AkkaSSLConfig
@@ -36,6 +39,7 @@ object AkkaSSLConfig extends ExtensionId[AkkaSSLConfig] with ExtensionIdProvider
 
 }
 
+@deprecated("Use Tcp and TLS with SSLEngine parameters instead. Setup the SSLEngine with needed parameters.", "2.6.0")
 final class AkkaSSLConfig(system: ExtendedActorSystem, val config: SSLConfigSettings) extends Extension {
 
   private val mkLogger = new AkkaLoggerFactory(system)
@@ -67,6 +71,15 @@ final class AkkaSSLConfig(system: ExtendedActorSystem, val config: SSLConfigSett
     new AkkaSSLConfig(system, f.apply(config))
 
   val hostnameVerifier = buildHostnameVerifier(config)
+
+  /**
+   * INTERNAL API
+   */
+  @InternalApi def useJvmHostnameVerification: Boolean =
+    hostnameVerifier match {
+      case _: DefaultHostnameVerifier | _: NoopHostnameVerifier => true
+      case _                                                    => false
+    }
 
   val sslEngineConfigurator = {
     val sslContext = if (config.default) {

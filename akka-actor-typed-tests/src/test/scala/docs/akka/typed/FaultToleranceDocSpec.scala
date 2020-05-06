@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package docs.akka.typed
@@ -7,7 +7,7 @@ package docs.akka.typed
 import scala.concurrent.duration._
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import com.github.ghik.silencer.silent
-import org.scalatest.WordSpecLike
+import org.scalatest.wordspec.AnyWordSpecLike
 
 object FaultToleranceDocSpec {
   // #bubbling-example
@@ -47,7 +47,7 @@ object FaultToleranceDocSpec {
 
         // here we don't handle Terminated at all which means that
         // when the child fails or stops gracefully this actor will
-        // fail with a DeathWatchException
+        // fail with a DeathPactException
         Behaviors.receiveMessage { message =>
           child ! message
           Behaviors.same
@@ -65,7 +65,7 @@ object FaultToleranceDocSpec {
           context.watch(middleManagement)
 
           // here we don't handle Terminated at all which means that
-          // when middle management fails with a DeathWatchException
+          // when middle management fails with a DeathPactException
           // this actor will also fail
           Behaviors.receiveMessage[Command] { message =>
             middleManagement ! message
@@ -81,7 +81,7 @@ object FaultToleranceDocSpec {
 class FaultToleranceDocSpec extends ScalaTestWithActorTestKit("""
       # silenced to not put noise in test logs
       akka.loglevel = off
-    """) with WordSpecLike {
+    """) with AnyWordSpecLike {
   import FaultToleranceDocSpec._
 
   "Bubbling of failures" must {

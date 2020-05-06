@@ -1,20 +1,20 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package docs.akka.cluster.sharding.typed
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
-
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.actor.testkit.typed.scaladsl.LogCapturing
 import akka.cluster.sharding.typed.scaladsl.ClusterSharding
 import akka.cluster.sharding.typed.scaladsl.Entity
 import akka.cluster.typed.Cluster
 import akka.cluster.typed.Join
+import akka.persistence.typed.PersistenceId
 import com.typesafe.config.ConfigFactory
-import org.scalatest.WordSpecLike
+import org.scalatest.wordspec.AnyWordSpecLike
 
 object AccountExampleSpec {
   val config = ConfigFactory.parseString("""
@@ -32,7 +32,7 @@ object AccountExampleSpec {
 
 class AccountExampleSpec
     extends ScalaTestWithActorTestKit(AccountExampleSpec.config)
-    with WordSpecLike
+    with AnyWordSpecLike
     with LogCapturing {
   import AccountExampleWithEventHandlersInState.AccountEntity
   import AccountExampleWithEventHandlersInState.AccountEntity._
@@ -43,7 +43,9 @@ class AccountExampleSpec
     super.beforeAll()
     Cluster(system).manager ! Join(Cluster(system).selfMember.address)
 
-    sharding.init(Entity(AccountEntity.TypeKey, ctx => AccountEntity(ctx.entityId)))
+    sharding.init(Entity(AccountEntity.TypeKey) { entityContext =>
+      AccountEntity(entityContext.entityId, PersistenceId(entityContext.entityTypeKey.name, entityContext.entityId))
+    })
   }
 
   "Account example" must {
@@ -62,7 +64,7 @@ class AccountExampleSpec
     "handle Withdraw" in {
       // OperationResult is the expected reply type for these commands, but it should also be
       // possible to use the super type AccountCommandReply
-      val probe = createTestProbe[AccountCommandReply]()
+      val probe = createTestProbe[CommandReply]()
       val ref = ClusterSharding(system).entityRefFor(AccountEntity.TypeKey, "2")
       ref ! CreateAccount(probe.ref)
       probe.expectMessage(Confirmed)
@@ -80,7 +82,7 @@ class AccountExampleSpec
       // AccountCommand[_] is the command type, but it should also be possible to narrow it to
       // AccountCommand[OperationResult]
       val probe = createTestProbe[OperationResult]()
-      val ref = ClusterSharding(system).entityRefFor[AccountCommand[OperationResult]](AccountEntity.TypeKey, "3")
+      val ref = ClusterSharding(system).entityRefFor[Command[OperationResult]](AccountEntity.TypeKey, "3")
       ref ! CreateAccount(probe.ref)
       probe.expectMessage(Confirmed)
       ref ! Deposit(100, probe.ref)

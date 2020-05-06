@@ -1,17 +1,17 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed.receptionist
+
+import scala.concurrent.Future
+import scala.concurrent.duration._
+import scala.util.Success
 
 import akka.actor.typed.{ ActorRef, ActorSystem }
 import akka.actor.typed.scaladsl.AskPattern._
 import akka.actor.typed.scaladsl.Behaviors
 import akka.util.Timeout
-
-import scala.concurrent.Future
-import scala.concurrent.duration._
-import scala.util.Success
 
 object ReceptionistApiSpec {
 
@@ -20,8 +20,7 @@ object ReceptionistApiSpec {
     implicit val timeout: Timeout = 3.seconds
     val service: ActorRef[String] = ???
     val key: ServiceKey[String] = ServiceKey[String]("id")
-    val system: ActorSystem[Void] = ???
-    implicit val scheduler = system.scheduler
+    implicit val system: ActorSystem[Void] = ???
     import system.executionContext
 
     // registration from outside, without ack, should be rare

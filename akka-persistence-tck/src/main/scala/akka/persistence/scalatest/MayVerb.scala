@@ -1,12 +1,12 @@
 /*
- * Copyright (C) 2014-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2014-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.persistence.scalatest
 
 import org.scalactic.source.Position
 import org.scalatest.exceptions.TestCanceledException
-import org.scalatest.words.StringVerbBlockRegistration
+import org.scalatest.verbs.StringVerbBlockRegistration
 
 trait MayVerb {
   import MayVerb._
@@ -15,7 +15,7 @@ trait MayVerb {
    * Configurable number of frames to be shown when a MAY test fails (is canceled).
    *
    * Defaults to `3`.
-   * Must be geater than `0`.
+   * Must be greater than `0`.
    */
   def mayVerbStacktraceContextFrames = 3
 

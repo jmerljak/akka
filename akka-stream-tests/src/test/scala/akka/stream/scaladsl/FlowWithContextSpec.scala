@@ -1,8 +1,10 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.scaladsl
+
+import scala.util.control.NoStackTrace
 
 import akka.stream.testkit.StreamSpec
 import akka.stream.testkit.scaladsl.TestSink
@@ -38,9 +40,31 @@ class FlowWithContextSpec extends StreamSpec {
         .asSourceWithContext(_.offset)
         .viaMat(mapMaterializedValueFlow)(Keep.both)
         .toMat(TestSink.probe[(Message, Long)])(Keep.both)
-        .run
+        .run()
       matValue shouldBe (42 -> materializedValue)
       probe.request(1).expectNext(((Message("a", 1L), 1L))).expectComplete()
+    }
+
+    "be able to map error via FlowWithContext.mapError" in {
+      val ex = new RuntimeException("ex") with NoStackTrace
+      val boom = new Exception("BOOM!") with NoStackTrace
+      val mapErrorFlow = FlowWithContext[Message, Long]
+        .map {
+          case m @ Message(_, offset) => if (offset == 3) throw ex else m
+        }
+        .mapError { case _: Throwable => boom }
+
+      Source(1L to 4L)
+        .map { offset =>
+          Message("a", offset)
+        }
+        .asSourceWithContext(_.offset)
+        .via(mapErrorFlow)
+        .runWith(TestSink.probe[(Message, Long)])
+        .request(3)
+        .expectNext((Message("a", 1L), 1L))
+        .expectNext((Message("a", 2L), 2L))
+        .expectError(boom)
     }
   }
 }

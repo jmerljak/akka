@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package docs.akka.typed
@@ -10,7 +10,7 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.Failure
 import scala.util.Success
-
+import akka.Done
 import akka.NotUsed
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.actor.testkit.typed.scaladsl.LogCapturing
@@ -20,9 +20,9 @@ import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.scaladsl.LoggerOps
 import akka.actor.typed.scaladsl.TimerScheduler
-import org.scalatest.WordSpecLike
+import org.scalatest.wordspec.AnyWordSpecLike
 
-class InteractionPatternsSpec extends ScalaTestWithActorTestKit with WordSpecLike with LogCapturing {
+class InteractionPatternsSpec extends ScalaTestWithActorTestKit with AnyWordSpecLike with LogCapturing {
 
   "The interaction patterns docs" must {
 
@@ -69,7 +69,7 @@ class InteractionPatternsSpec extends ScalaTestWithActorTestKit with WordSpecLik
           Behaviors.receiveMessage[Request] {
             case Request(query, replyTo) =>
               // ... process query ...
-              replyTo ! Response(s"Here's the cookies for [$query]!")
+              replyTo ! Response(s"Here are the cookies for [$query]!")
               Behaviors.same
           }
         // #request-response-respond
@@ -82,11 +82,19 @@ class InteractionPatternsSpec extends ScalaTestWithActorTestKit with WordSpecLik
       val context = new {
         def self = probe.ref
       }
+
       // #request-response-send
       cookieFabric ! CookieFabric.Request("give me cookies", context.self)
       // #request-response-send
 
       probe.receiveMessage()
+
+      Behaviors.setup[Nothing] { context =>
+        // #ignore-reply
+        cookieFabric ! CookieFabric.Request("don't send cookies back", context.system.ignoreRef)
+        // #ignore-reply
+        Behaviors.empty
+      }
     }
 
     "contain a sample for adapted response" in {
@@ -390,12 +398,18 @@ class InteractionPatternsSpec extends ScalaTestWithActorTestKit with WordSpecLik
     // #standalone-ask
     object CookieFabric {
       sealed trait Command {}
-      case class GiveMeCookies(replyTo: ActorRef[Cookies]) extends Command
-      case class Cookies(count: Int)
+      case class GiveMeCookies(count: Int, replyTo: ActorRef[Reply]) extends Command
+
+      sealed trait Reply
+      case class Cookies(count: Int) extends Reply
+      case class InvalidRequest(reason: String) extends Reply
 
       def apply(): Behaviors.Receive[CookieFabric.GiveMeCookies] =
         Behaviors.receiveMessage { message =>
-          message.replyTo ! Cookies(5)
+          if (message.count >= 5)
+            message.replyTo ! InvalidRequest("Too many cookies.")
+          else
+            message.replyTo ! Cookies(message.count)
           Behaviors.same
         }
     }
@@ -404,27 +418,110 @@ class InteractionPatternsSpec extends ScalaTestWithActorTestKit with WordSpecLik
     // keep this out of the sample as it uses the testkit spawn
     val cookieFabric = spawn(CookieFabric())
 
+    val theSystem = testKit.system
+
     // #standalone-ask
 
     import akka.actor.typed.scaladsl.AskPattern._
     import akka.util.Timeout
 
-    // asking someone requires a timeout and a scheduler, if the timeout hits without response
+    // asking someone requires a timeout if the timeout hits without response
     // the ask is failed with a TimeoutException
     implicit val timeout: Timeout = 3.seconds
-    implicit val scheduler = system.scheduler
+    // implicit ActorSystem in scope
+    implicit val system: ActorSystem[_] = theSystem
 
-    val result: Future[CookieFabric.Cookies] = cookieFabric.ask(ref => CookieFabric.GiveMeCookies(ref))
+    val result: Future[CookieFabric.Reply] = cookieFabric.ask(ref => CookieFabric.GiveMeCookies(3, ref))
 
     // the response callback will be executed on this execution context
     implicit val ec = system.executionContext
 
     result.onComplete {
-      case Success(cookies) => println(s"Yay, cookies! $cookies")
-      case Failure(ex)      => println(s"Boo! didn't get cookies: ${ex.getMessage}")
+      case Success(CookieFabric.Cookies(count))         => println(s"Yay, $count cookies!")
+      case Success(CookieFabric.InvalidRequest(reason)) => println(s"No cookies for me. $reason")
+      case Failure(ex)                                  => println(s"Boo! didn't get cookies: ${ex.getMessage}")
     }
     // #standalone-ask
 
-    result.futureValue shouldEqual CookieFabric.Cookies(5)
+    result.futureValue shouldEqual CookieFabric.Cookies(3)
+
+    // #standalone-ask-fail-future
+    val cookies: Future[CookieFabric.Cookies] =
+      cookieFabric.ask[CookieFabric.Reply](ref => CookieFabric.GiveMeCookies(3, ref)).flatMap {
+        case c: CookieFabric.Cookies             => Future.successful(c)
+        case CookieFabric.InvalidRequest(reason) => Future.failed(new IllegalArgumentException(reason))
+      }
+
+    cookies.onComplete {
+      case Success(CookieFabric.Cookies(count)) => println(s"Yay, $count cookies!")
+      case Failure(ex)                          => println(s"Boo! didn't get cookies: ${ex.getMessage}")
+    }
+    // #standalone-ask-fail-future
+
+    cookies.futureValue shouldEqual CookieFabric.Cookies(3)
+  }
+
+  "contain a sample for pipeToSelf" in {
+    //#pipeToSelf
+
+    trait CustomerDataAccess {
+      def update(value: Customer): Future[Done]
+    }
+
+    final case class Customer(id: String, version: Long, name: String, address: String)
+
+    object CustomerRepository {
+      sealed trait Command
+
+      final case class Update(value: Customer, replyTo: ActorRef[UpdateResult]) extends Command
+      sealed trait UpdateResult
+      final case class UpdateSuccess(id: String) extends UpdateResult
+      final case class UpdateFailure(id: String, reason: String) extends UpdateResult
+      private final case class WrappedUpdateResult(result: UpdateResult, replyTo: ActorRef[UpdateResult])
+          extends Command
+
+      private val MaxOperationsInProgress = 10
+
+      def apply(dataAccess: CustomerDataAccess): Behavior[Command] = {
+        next(dataAccess, operationsInProgress = 0)
+      }
+
+      private def next(dataAccess: CustomerDataAccess, operationsInProgress: Int): Behavior[Command] = {
+        Behaviors.receive { (context, command) =>
+          command match {
+            case Update(value, replyTo) =>
+              if (operationsInProgress == MaxOperationsInProgress) {
+                replyTo ! UpdateFailure(value.id, s"Max $MaxOperationsInProgress concurrent operations supported")
+                Behaviors.same
+              } else {
+                val futureResult = dataAccess.update(value)
+                context.pipeToSelf(futureResult) {
+                  // map the Future value to a message, handled by this actor
+                  case Success(_) => WrappedUpdateResult(UpdateSuccess(value.id), replyTo)
+                  case Failure(e) => WrappedUpdateResult(UpdateFailure(value.id, e.getMessage), replyTo)
+                }
+                // increase operationsInProgress counter
+                next(dataAccess, operationsInProgress + 1)
+              }
+
+            case WrappedUpdateResult(result, replyTo) =>
+              // send result to original requestor
+              replyTo ! result
+              // decrease operationsInProgress counter
+              next(dataAccess, operationsInProgress - 1)
+          }
+        }
+      }
+    }
+    //#pipeToSelf
+
+    val dataAccess = new CustomerDataAccess {
+      override def update(value: Customer): Future[Done] = Future.successful(Done)
+    }
+
+    val repository = spawn(CustomerRepository(dataAccess))
+    val probe = createTestProbe[CustomerRepository.UpdateResult]()
+    repository ! CustomerRepository.Update(Customer("123", 1L, "Alice", "Fairy tail road 7"), probe.ref)
+    probe.expectMessage(CustomerRepository.UpdateSuccess("123"))
   }
 }

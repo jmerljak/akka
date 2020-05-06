@@ -1,23 +1,25 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote.artery
 
-import scala.concurrent.duration._
 import scala.concurrent.Future
+import scala.concurrent.duration._
 import scala.util.control.NoStackTrace
 
+import akka.Done
 import akka.actor.ActorSystem
+import akka.actor.Address
+import akka.dispatch.ExecutionContexts
 import akka.remote.UniqueAddress
 import akka.stream.Attributes
 import akka.stream.FlowShape
 import akka.stream.Inlet
 import akka.stream.Outlet
 import akka.stream.stage._
-import akka.util.{ unused, OptionVal }
-import akka.Done
-import akka.actor.Address
+import akka.util.OptionVal
+import akka.util.unused
 
 /**
  * INTERNAL API
@@ -70,6 +72,17 @@ private[remote] class OutboundHandshake(
       private var pendingMessage: OptionVal[OutboundEnvelope] = OptionVal.None
       private var injectHandshakeTickScheduled = false
 
+      private val uniqueRemoteAddressAsyncCallback = getAsyncCallback[UniqueAddress] { _ =>
+        if (handshakeState != Completed) {
+          handshakeCompleted()
+          if (isAvailable(out))
+            pull(in)
+        }
+      }
+      // this must be a `val` because function equality is used when removing in postStop
+      private val uniqueRemoteAddressListener: UniqueAddress => Unit =
+        peer => uniqueRemoteAddressAsyncCallback.invoke(peer)
+
       override protected def logSource: Class[_] = classOf[OutboundHandshake]
 
       override def preStart(): Unit = {
@@ -78,6 +91,11 @@ private[remote] class OutboundHandshake(
           case d: FiniteDuration => scheduleWithFixedDelay(LivenessProbeTick, d, d)
           case _                 => // only used in control stream
         }
+      }
+
+      override def postStop(): Unit = {
+        outboundContext.associationState.removeUniqueRemoteAddressListener(uniqueRemoteAddressListener)
+        super.postStop()
       }
 
       // InHandler
@@ -116,26 +134,17 @@ private[remote] class OutboundHandshake(
             }
 
           case Start =>
-            val uniqueRemoteAddress = outboundContext.associationState.uniqueRemoteAddress
-            if (uniqueRemoteAddress.isCompleted) {
-              handshakeCompleted()
-            } else {
-              // will pull when handshake reply is received (uniqueRemoteAddress completed)
-              handshakeState = ReqInProgress
-              scheduleWithFixedDelay(HandshakeRetryTick, retryInterval, retryInterval)
+            outboundContext.associationState.uniqueRemoteAddress() match {
+              case Some(_) =>
+                handshakeCompleted()
+              case None =>
+                // will pull when handshake reply is received (uniqueRemoteAddress populated)
+                handshakeState = ReqInProgress
+                scheduleWithFixedDelay(HandshakeRetryTick, retryInterval, retryInterval)
 
-              // The InboundHandshake stage will complete the uniqueRemoteAddress future
-              // when it receives the HandshakeRsp reply
-              implicit val ec = materializer.executionContext
-              uniqueRemoteAddress.foreach {
-                getAsyncCallback[UniqueAddress] { _ =>
-                  if (handshakeState != Completed) {
-                    handshakeCompleted()
-                    if (isAvailable(out))
-                      pull(in)
-                  }
-                }.invoke
-              }
+                // The InboundHandshake stage will complete the AssociationState.uniqueRemoteAddress
+                // when it receives the HandshakeRsp reply
+                outboundContext.associationState.addUniqueRemoteAddressListener(uniqueRemoteAddressListener)
             }
 
             // always push a HandshakeReq as the first message
@@ -218,6 +227,10 @@ private[remote] class InboundHandshake(inboundContext: InboundContext, inControl
     new TimerGraphStageLogic(shape) with OutHandler with StageLogging {
       import OutboundHandshake._
 
+      private val runInStage = getAsyncCallback[() => Unit] { thunk =>
+        thunk()
+      }
+
       // InHandler
       if (inControlStream)
         setHandler(
@@ -233,7 +246,7 @@ private[remote] class InboundHandshake(inboundContext: InboundContext, inControl
                   // that the other system is alive.
                   inboundContext.association(from.address).associationState.lastUsedTimestamp.set(System.nanoTime())
 
-                  after(inboundContext.completeHandshake(from)) {
+                  after(inboundContext.completeHandshake(from)) { () =>
                     pull(in)
                   }
                 case _ =>
@@ -255,7 +268,7 @@ private[remote] class InboundHandshake(inboundContext: InboundContext, inControl
 
       private def onHandshakeReq(from: UniqueAddress, to: Address): Unit = {
         if (to == inboundContext.localAddress.address) {
-          after(inboundContext.completeHandshake(from)) {
+          after(inboundContext.completeHandshake(from)) { () =>
             inboundContext.sendControl(from.address, HandshakeRsp(inboundContext.localAddress))
             pull(in)
           }
@@ -274,18 +287,15 @@ private[remote] class InboundHandshake(inboundContext: InboundContext, inControl
         }
       }
 
-      private def after(first: Future[Done])(thenInside: => Unit): Unit = {
+      private def after(first: Future[Done])(thenInside: () => Unit): Unit = {
         first.value match {
           case Some(_) =>
             // This in the normal case (all but the first). The future will be completed
             // because handshake was already completed. Note that we send those HandshakeReq
             // periodically.
-            thenInside
+            thenInside()
           case None =>
-            implicit val ec = materializer.executionContext
-            first.onComplete { _ =>
-              getAsyncCallback[Done](_ => thenInside).invoke(Done)
-            }
+            first.onComplete(_ => runInStage.invoke(thenInside))(ExecutionContexts.parasitic)
         }
 
       }

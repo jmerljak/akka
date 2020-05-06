@@ -1,11 +1,12 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package jdocs.serialization;
 
 import java.io.UnsupportedEncodingException;
 
+import akka.actor.typed.javadsl.Behaviors;
 import akka.cluster.Cluster;
 import akka.testkit.javadsl.TestKit;
 import org.junit.Test;
@@ -187,5 +188,15 @@ public class SerializationDocTest {
     assertEquals(original, back);
 
     TestKit.shutdownActorSystem(system);
+  }
+
+  public void demonstrateTheProgrammaticAPITyped() {
+    // #programmatic-typed
+    akka.actor.typed.ActorSystem<Void> system =
+        akka.actor.typed.ActorSystem.create(Behaviors.empty(), "example");
+
+    // Get the Serialization Extension
+    Serialization serialization = SerializationExtension.get(system);
+    // #programmatic-typed
   }
 }

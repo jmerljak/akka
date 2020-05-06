@@ -1,27 +1,27 @@
 /*
- * Copyright (C) 2014-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2014-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.scaladsl
 
 import java.util.SplittableRandom
 
-import akka.NotUsed
-import akka.annotation.InternalApi
-import akka.stream._
-import akka.stream.impl.Stages.DefaultAttributes
-import akka.stream.impl._
-import akka.stream.impl.fusing.GraphStages
-import akka.stream.scaladsl.Partition.PartitionOutOfBoundsException
-import akka.stream.stage.{ GraphStage, GraphStageLogic, InHandler, OutHandler }
-import akka.util.ConstantFun
-
 import scala.annotation.tailrec
 import scala.annotation.unchecked.uncheckedVariance
 import scala.collection.{ immutable, mutable }
 import scala.concurrent.Promise
 import scala.util.control.{ NoStackTrace, NonFatal }
+
+import akka.NotUsed
+import akka.annotation.InternalApi
+import akka.stream._
 import akka.stream.ActorAttributes.SupervisionStrategy
+import akka.stream.impl._
+import akka.stream.impl.Stages.DefaultAttributes
+import akka.stream.impl.fusing.GraphStages
+import akka.stream.scaladsl.Partition.PartitionOutOfBoundsException
+import akka.stream.stage.{ GraphStage, GraphStageLogic, InHandler, OutHandler }
+import akka.util.ConstantFun
 
 /**
  * INTERNAL API
@@ -37,6 +37,9 @@ private[stream] final class GenericGraph[S <: Shape, Mat](
 
   override def withAttributes(attr: Attributes): Graph[S, Mat] =
     new GenericGraphWithChangedAttributes(shape, traversalBuilder, attr)
+
+  def mapMaterializedValue[Mat2](f: Mat => Mat2): GenericGraph[S, Mat2] =
+    new GenericGraph(shape, traversalBuilder.transformMat(f))
 }
 
 /**
@@ -858,12 +861,10 @@ final class Partition[T](val outputPorts: Int, val partitioner: T => Int, val ea
                   if (idx == outPendingIdx) {
                     push(o, elem)
                     outPendingElem = null
-                    if (!isClosed(in)) {
-                      if (!hasBeenPulled(in)) {
-                        pull(in)
-                      }
-                    } else
+                    if (isClosed(in))
                       completeStage()
+                    else if (!hasBeenPulled(in))
+                      pull(in)
                   }
                 } else if (!hasBeenPulled(in))
                   pull(in)
@@ -875,12 +876,12 @@ final class Partition[T](val outputPorts: Int, val partitioner: T => Int, val ea
                   downstreamRunning -= 1
                   if (downstreamRunning == 0)
                     cancelStage(cause)
-                  else if (outPendingElem != null) {
-                    if (idx == outPendingIdx) {
-                      outPendingElem = null
-                      if (!hasBeenPulled(in))
-                        pull(in)
-                    }
+                  else if (outPendingElem != null && idx == outPendingIdx) {
+                    outPendingElem = null
+                    if (isClosed(in))
+                      cancelStage(cause)
+                    else if (!hasBeenPulled(in))
+                      pull(in)
                   }
                 }
             })

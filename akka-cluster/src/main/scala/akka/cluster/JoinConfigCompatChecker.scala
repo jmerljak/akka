@@ -1,18 +1,19 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster
 
 import java.util
 
+import scala.collection.{ immutable => im }
+
+import com.typesafe.config.{ Config, ConfigFactory, ConfigValue }
+
 import akka.actor.ExtendedActorSystem
 import akka.annotation.{ DoNotInherit, InternalApi }
 import akka.util.ccompat._
-import com.typesafe.config.{ Config, ConfigFactory, ConfigValue }
-
 import akka.util.ccompat.JavaConverters._
-import scala.collection.{ immutable => im }
 
 abstract class JoinConfigCompatChecker {
 
@@ -23,7 +24,7 @@ abstract class JoinConfigCompatChecker {
    * Runs the Config check.
    *
    * Implementers are free to define what makes Config entry compatible or not.
-   * We do provide some pre-build checks tough: [[JoinConfigCompatChecker.exists()]] and [[JoinConfigCompatChecker.fullMatch()]]
+   * We do provide some pre-build checks tough: [[JoinConfigCompatChecker.exists]] and [[JoinConfigCompatChecker.fullMatch]]
    *
    * @param toCheck - the Config instance to be checked
    * @param actualConfig - the Config instance containing the actual values

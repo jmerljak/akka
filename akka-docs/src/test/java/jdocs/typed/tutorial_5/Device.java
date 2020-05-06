@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package jdocs.typed.tutorial_5;
@@ -48,6 +48,7 @@ public class Device extends AbstractBehavior<Device.Command> {
     }
   }
 
+  // #respond-declare
   public static final class RespondTemperature {
     final long requestId;
     final String deviceId;
@@ -59,6 +60,7 @@ public class Device extends AbstractBehavior<Device.Command> {
       this.value = value;
     }
   }
+  // #respond-declare
 
   static enum Passivate implements Command {
     INSTANCE
@@ -68,14 +70,13 @@ public class Device extends AbstractBehavior<Device.Command> {
     return Behaviors.setup(context -> new Device(context, groupId, deviceId));
   }
 
-  private final ActorContext<Command> context;
   private final String groupId;
   private final String deviceId;
 
   private Optional<Double> lastTemperatureReading = Optional.empty();
 
   private Device(ActorContext<Command> context, String groupId, String deviceId) {
-    this.context = context;
+    super(context);
     this.groupId = groupId;
     this.deviceId = deviceId;
 
@@ -93,19 +94,21 @@ public class Device extends AbstractBehavior<Device.Command> {
   }
 
   private Behavior<Command> onRecordTemperature(RecordTemperature r) {
-    context.getLog().info("Recorded temperature reading {} with {}", r.value, r.requestId);
+    getContext().getLog().info("Recorded temperature reading {} with {}", r.value, r.requestId);
     lastTemperatureReading = Optional.of(r.value);
     r.replyTo.tell(new TemperatureRecorded(r.requestId));
     return this;
   }
 
+  // #respond-reply
   private Behavior<Command> onReadTemperature(ReadTemperature r) {
     r.replyTo.tell(new RespondTemperature(r.requestId, deviceId, lastTemperatureReading));
     return this;
   }
+  // #respond-reply
 
   private Behavior<Command> onPostStop() {
-    context.getLog().info("Device actor {}-{} stopped", groupId, deviceId);
+    getContext().getLog().info("Device actor {}-{} stopped", groupId, deviceId);
     return Behaviors.stopped();
   }
 }

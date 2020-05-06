@@ -1,28 +1,28 @@
 /*
- * Copyright (C) 2015-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2015-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.impl.io
 
 import java.nio.ByteBuffer
+
+import scala.annotation.tailrec
+import scala.util.{ Failure, Success, Try }
+import scala.util.control.NonFatal
+
+import javax.net.ssl._
 import javax.net.ssl.SSLEngineResult.HandshakeStatus
 import javax.net.ssl.SSLEngineResult.HandshakeStatus._
 import javax.net.ssl.SSLEngineResult.Status._
-import javax.net.ssl._
 
 import akka.actor._
 import akka.annotation.InternalApi
 import akka.stream._
+import akka.stream.TLSProtocol._
+import akka.stream.impl._
 import akka.stream.impl.FanIn.InputBunch
 import akka.stream.impl.FanOut.OutputBunch
-import akka.stream.impl._
 import akka.util.ByteString
-
-import scala.annotation.tailrec
-import akka.stream.TLSProtocol._
-
-import scala.util.control.NonFatal
-import scala.util.{ Failure, Success, Try }
 
 /**
  * INTERNAL API.

@@ -1,11 +1,11 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.persistence.typed.javadsl;
 
 import akka.actor.testkit.typed.javadsl.LogCapturing;
-import akka.actor.testkit.typed.javadsl.LoggingEventFilter;
+import akka.actor.testkit.typed.javadsl.LoggingTestKit;
 import akka.actor.testkit.typed.javadsl.TestKitJunitResource;
 import akka.actor.testkit.typed.javadsl.TestProbe;
 import akka.actor.typed.ActorRef;
@@ -19,7 +19,7 @@ import com.typesafe.config.ConfigFactory;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
-import org.scalatest.junit.JUnitSuite;
+import org.scalatestplus.junit.JUnitSuite;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -39,7 +39,7 @@ public class LoggerSourceTest extends JUnitSuite {
   private static final AtomicInteger idCounter = new AtomicInteger(0);
 
   public static PersistenceId nextId() {
-    return new PersistenceId("" + idCounter.incrementAndGet());
+    return PersistenceId.ofUniqueId("" + idCounter.incrementAndGet());
   }
 
   static class LoggingBehavior extends EventSourcedBehavior<String, String, String> {
@@ -80,7 +80,7 @@ public class LoggerSourceTest extends JUnitSuite {
     }
 
     @Override
-    public SignalHandler signalHandler() {
+    public SignalHandler<String> signalHandler() {
       return newSignalHandlerBuilder()
           .onSignal(
               RecoveryCompleted.instance(),
@@ -105,27 +105,27 @@ public class LoggerSourceTest extends JUnitSuite {
     expectedMdc1.put("persistencePhase", "replay-evt");
 
     ActorRef<String> ref =
-        LoggingEventFilter.info("recovery-completed")
+        LoggingTestKit.info("recovery-completed")
             .withMdc(expectedMdc1)
             .withCustom(event -> event.loggerName().equals(LoggingBehavior.class.getName()))
-            .intercept(
+            .expect(
                 testKit.system(),
                 () -> {
                   return testKit.spawn(behavior);
                 });
 
-    // MDC persistenceId ajd persistencePhase for the "command-received" not included in the
+    // MDC persistenceId and persistencePhase for the "command-received" not included in the
     // "command-received" logging, because that is via ActorContext.log directly and
     // EventSourcedBehaviorImpl
     // isn't involved.
 
-    LoggingEventFilter.info("command-received")
+    LoggingTestKit.info("command-received")
         .withCustom(
             event -> {
               return event.loggerName().equals(LoggingBehavior.class.getName())
                   && event.getMdc().get("akkaSource").equals(ref.path().toString());
             })
-        .intercept(
+        .expect(
             testKit.system(),
             () -> {
               ref.tell("command");
@@ -136,14 +136,14 @@ public class LoggerSourceTest extends JUnitSuite {
     expectedMdc3.put("persistenceId", "1");
     expectedMdc3.put("persistencePhase", "running-cmd");
 
-    LoggingEventFilter.info("event-received")
+    LoggingTestKit.info("event-received")
         .withMdc(expectedMdc3)
         .withCustom(
             event -> {
               return event.loggerName().equals(LoggingBehavior.class.getName())
                   && event.getMdc().get("akkaSource").equals(ref.path().toString());
             })
-        .intercept(
+        .expect(
             testKit.system(),
             () -> {
               ref.tell("command");

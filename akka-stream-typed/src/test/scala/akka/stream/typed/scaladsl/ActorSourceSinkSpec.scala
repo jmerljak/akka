@@ -1,17 +1,18 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.typed.scaladsl
 
+import org.scalatest.wordspec.AnyWordSpecLike
+
+import akka.actor.testkit.typed.scaladsl._
 import akka.actor.typed.ActorRef
 import akka.actor.typed.scaladsl.Behaviors
 import akka.stream.{ CompletionStrategy, OverflowStrategy }
 import akka.stream.scaladsl.Keep
 import akka.stream.scaladsl.Sink
 import akka.stream.scaladsl.Source
-import akka.actor.testkit.typed.scaladsl._
-import org.scalatest.WordSpecLike
 
 object ActorSourceSinkSpec {
 
@@ -22,7 +23,7 @@ object ActorSourceSinkSpec {
   case object Failed extends AckProto
 }
 
-class ActorSourceSinkSpec extends ScalaTestWithActorTestKit with WordSpecLike {
+class ActorSourceSinkSpec extends ScalaTestWithActorTestKit with AnyWordSpecLike {
   import ActorSourceSinkSpec._
 
   "ActorSink" should {
@@ -65,7 +66,7 @@ class ActorSourceSinkSpec extends ScalaTestWithActorTestKit with WordSpecLike {
       val in =
         Source
           .queue[String](10, OverflowStrategy.dropBuffer)
-          .to(ActorSink.actorRefWithAck(pilotRef, Msg.apply, Init.apply, "ACK", Complete, _ => Failed))
+          .to(ActorSink.actorRefWithBackpressure(pilotRef, Msg.apply, Init.apply, "ACK", Complete, _ => Failed))
           .run()
 
       p.expectMessageType[Init]
@@ -110,7 +111,7 @@ class ActorSourceSinkSpec extends ScalaTestWithActorTestKit with WordSpecLike {
       val p = TestProbe[String]()
 
       val (in, out) = ActorSource
-        .actorRefWithAck[String, String](
+        .actorRefWithBackpressure[String, String](
           p.ref,
           "ack", { case "complete" => CompletionStrategy.draining },
           PartialFunction.empty)

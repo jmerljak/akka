@@ -1,17 +1,17 @@
 /*
- * Copyright (C) 2015-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2015-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.impl
+
+import scala.concurrent.{ Future, Promise }
+import scala.util.control.NonFatal
 
 import akka.annotation.InternalApi
 import akka.stream._
 import akka.stream.impl.Stages.DefaultAttributes
 import akka.stream.scaladsl.{ Keep, Source }
 import akka.stream.stage._
-
-import scala.concurrent.{ Future, Promise }
-import scala.util.control.NonFatal
 
 /**
  * INTERNAL API
@@ -35,13 +35,18 @@ import scala.util.control.NonFatal
     val logic = new GraphStageLogic(shape) with OutHandler {
 
       override def onDownstreamFinish(cause: Throwable): Unit = {
-        matPromise.failure(
-          new RuntimeException("Downstream canceled without triggering lazy source materialization", cause))
+        matPromise.failure(new NeverMaterializedException(cause))
         completeStage()
       }
 
       override def onPull(): Unit = {
-        val source = sourceFactory()
+        val source = try {
+          sourceFactory()
+        } catch {
+          case NonFatal(ex) =>
+            matPromise.tryFailure(ex)
+            throw ex
+        }
         val subSink = new SubSinkInlet[T]("LazySource")
         subSink.pull()
 
@@ -76,7 +81,7 @@ import scala.util.control.NonFatal
       setHandler(out, this)
 
       override def postStop() = {
-        matPromise.tryFailure(new RuntimeException("LazySource stopped without completing the materialized future"))
+        if (!matPromise.isCompleted) matPromise.tryFailure(new AbruptStageTerminationException(this))
       }
     }
 

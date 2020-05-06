@@ -1,20 +1,22 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed.javadsl
 
 import akka.actor
+import akka.actor.typed.ActorRef
+import akka.actor.typed.ActorSystem
 import akka.actor.typed.Behavior
 import akka.actor.typed.Props
-import akka.actor.typed.ActorRef
-import akka.actor.typed.scaladsl.adapter._
-import akka.actor.typed.ActorSystem
+import akka.actor.typed.Scheduler
+import akka.actor.typed.SupervisorStrategy
 import akka.actor.typed.internal.adapter.ActorContextAdapter
+import akka.actor.typed.scaladsl.adapter._
 import akka.japi.Creator
 
 /**
- * Java API: Adapters between typed and classic actors and actor systems.
+ * Adapters between typed and classic actors and actor systems.
  * The underlying `ActorSystem` is the classic [[akka.actor.ActorSystem]]
  * which runs Akka [[akka.actor.typed.Behavior]] on an emulation layer. In this
  * system typed and classic actors can coexist.
@@ -142,7 +144,10 @@ object Adapter {
    * example of that.
    */
   def props[T](behavior: Creator[Behavior[T]], deploy: Props): akka.actor.Props =
-    akka.actor.typed.internal.adapter.PropsAdapter(() => behavior.create(), deploy)
+    akka.actor.typed.internal.adapter.PropsAdapter(
+      () => Behaviors.supervise(behavior.create()).onFailure(SupervisorStrategy.stop),
+      deploy,
+      rethrowTypedFailure = false)
 
   /**
    * Wrap [[akka.actor.typed.Behavior]] in a classic [[akka.actor.Props]], i.e. when
@@ -155,4 +160,10 @@ object Adapter {
    */
   def props[T](behavior: Creator[Behavior[T]]): akka.actor.Props =
     props(behavior, Props.empty)
+
+  def toClassic(scheduler: Scheduler): akka.actor.Scheduler =
+    scheduler.toClassic
+
+  def toTyped[T](scheduler: akka.actor.Scheduler): Scheduler =
+    scheduler.toTyped
 }

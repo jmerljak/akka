@@ -1,17 +1,18 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor
 
-import akka.AkkaException
-import akka.event.LoggingAdapter
 import java.util.Optional
 
 import scala.annotation.tailrec
 import scala.beans.BeanProperty
 import scala.util.control.NoStackTrace
+
+import akka.AkkaException
 import akka.annotation.InternalApi
+import akka.event.LoggingAdapter
 import akka.util.unused
 
 /**
@@ -288,6 +289,8 @@ final case class UnhandledMessage(
     @BeanProperty sender: ActorRef,
     @BeanProperty recipient: ActorRef)
     extends NoSerializationVerificationNeeded
+    with WrappedMessage
+    with AllDeadLetters
 
 /**
  * Classes for passing status back to the sender.
@@ -498,7 +501,7 @@ trait Actor {
    * self ! message
    * </pre>
    */
-  implicit final val self = context.self //MUST BE A VAL, TRUST ME
+  implicit final val self: ActorRef = context.self //MUST BE A VAL, TRUST ME
 
   /**
    * The reference sender Actor of the last received message.

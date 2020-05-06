@@ -1,27 +1,27 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.io
 
-import akka.actor.{ ActorRef, PoisonPill }
-import akka.io.Tcp._
-import akka.testkit.{ AkkaSpec, TestProbe }
-import akka.util.ByteString
 import java.io.IOException
 import java.net.{ InetSocketAddress, ServerSocket }
 
-import akka.testkit.WithLogCapturing
-import org.scalatest.concurrent.TimeLimits
-
 import scala.concurrent.duration._
 import scala.language.postfixOps
+
+import org.scalatest.concurrent.TimeLimits
+
+import akka.actor.{ ActorRef, PoisonPill }
+import akka.io.Tcp._
+import akka.testkit.{ AkkaSpec, TestProbe }
+import akka.testkit.WithLogCapturing
+import akka.util.ByteString
 
 class TcpIntegrationSpec extends AkkaSpec("""
     akka.loglevel = debug
     akka.loggers = ["akka.testkit.SilenceAllTestEventListener"]
     akka.io.tcp.trace-logging = on
-    akka.actor.serialize-creators = on
     """) with TcpIntegrationSpecSupport with TimeLimits with WithLogCapturing {
 
   def verifyActorTermination(actor: ActorRef): Unit = {

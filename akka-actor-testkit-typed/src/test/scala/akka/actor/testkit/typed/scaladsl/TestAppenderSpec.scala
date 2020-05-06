@@ -1,16 +1,26 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.testkit.typed.scaladsl
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import akka.actor.testkit.typed.TestException
-import org.scalatest.WordSpecLike
+import scala.concurrent.Future
+
+import org.scalatest.wordspec.AnyWordSpecLike
 import org.slf4j.LoggerFactory
 
-class TestAppenderSpec extends ScalaTestWithActorTestKit with WordSpecLike with LogCapturing {
+import akka.actor.testkit.typed.TestException
+
+class TestAppenderSpec
+    extends ScalaTestWithActorTestKit(
+      """
+  # increase to avoid spurious failures in "find unexpected async events withOccurrences(0)"
+  akka.actor.testkit.typed.expect-no-message-default = 1000 ms
+  """)
+    with AnyWordSpecLike
+    with LogCapturing {
 
   class AnotherLoggerClass
 
@@ -18,20 +28,20 @@ class TestAppenderSpec extends ScalaTestWithActorTestKit with WordSpecLike with 
 
   "TestAppender and LoggingEventFilter" must {
     "filter errors without cause" in {
-      LoggingEventFilter.error("an error").withOccurrences(2).intercept {
+      LoggingTestKit.error("an error").withOccurrences(2).expect {
         log.error("an error")
         log.error("an error")
       }
     }
 
     "filter errors with cause" in {
-      LoggingEventFilter.error("err").withCause[TestException].intercept {
+      LoggingTestKit.error("err").withCause[TestException].expect {
         log.error("err", TestException("an error"))
       }
     }
 
     "filter warnings" in {
-      LoggingEventFilter.warn("a warning").withOccurrences(2).intercept {
+      LoggingTestKit.warn("a warning").withOccurrences(2).expect {
         log.error("an error")
         log.warn("a warning")
         log.error("an error")
@@ -39,9 +49,24 @@ class TestAppenderSpec extends ScalaTestWithActorTestKit with WordSpecLike with 
       }
     }
 
+    "find excess messages" in {
+      intercept[AssertionError] {
+        LoggingTestKit.warn("a warning").withOccurrences(2).expect {
+          log.error("an error")
+          log.warn("a warning")
+          log.warn("a warning")
+          log.error("an error")
+          // since this logging is synchronous it will notice 3 occurrences but expecting 2,
+          // but note that it will not look for asynchronous excess messages when occurrences > 0 and it has
+          // already found expected number
+          log.warn("a warning") // 3rd
+        }
+      }.getMessage should include("Received 1 excess messages")
+    }
+
     "only filter events for given logger name" in {
       val count = new AtomicInteger
-      LoggingEventFilter
+      LoggingTestKit
         .custom({
           case logEvent =>
             count.incrementAndGet()
@@ -49,7 +74,7 @@ class TestAppenderSpec extends ScalaTestWithActorTestKit with WordSpecLike with 
         })
         .withOccurrences(2)
         .withLoggerName(classOf[AnotherLoggerClass].getName)
-        .intercept {
+        .expect {
           LoggerFactory.getLogger(classOf[AnotherLoggerClass]).info("Hello from right logger")
           log.info("Hello wrong logger")
           LoggerFactory.getLogger(classOf[AnotherLoggerClass]).info("Hello from right logger")
@@ -57,14 +82,14 @@ class TestAppenderSpec extends ScalaTestWithActorTestKit with WordSpecLike with 
       count.get should ===(2)
     }
 
-    "find unexpected events withOccurences(0)" in {
-      LoggingEventFilter.warn("a warning").withOccurrences(0).intercept {
+    "find unexpected events withOccurrences(0)" in {
+      LoggingTestKit.warn("a warning").withOccurrences(0).expect {
         log.error("an error")
         log.warn("another warning")
       }
 
       intercept[AssertionError] {
-        LoggingEventFilter.warn("a warning").withOccurrences(0).intercept {
+        LoggingTestKit.warn("a warning").withOccurrences(0).expect {
           log.error("an error")
           log.warn("a warning")
           log.warn("another warning")
@@ -72,11 +97,25 @@ class TestAppenderSpec extends ScalaTestWithActorTestKit with WordSpecLike with 
       }.getMessage should include("Received 1 excess messages")
 
       intercept[AssertionError] {
-        LoggingEventFilter.warn("a warning").withOccurrences(0).intercept {
+        LoggingTestKit.warn("a warning").withOccurrences(0).expect {
           log.warn("a warning")
           log.warn("a warning")
         }
       }.getMessage should include("Received 2 excess messages")
+
+    }
+
+    "find unexpected async events withOccurrences(0)" in {
+      // expect-no-message-default = 1000 ms
+      intercept[AssertionError] {
+        LoggingTestKit.warn("a warning").withOccurrences(0).expect {
+          Future {
+            Thread.sleep(20)
+            log.warn("a warning")
+            log.warn("a warning")
+          }(system.executionContext)
+        }
+      }
     }
 
   }

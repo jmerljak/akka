@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote.transport.netty
@@ -14,18 +14,19 @@ import java.security.SecureRandom
 
 import scala.util.Try
 
-import akka.actor.ActorSystem
-import akka.event.Logging
-import akka.event.MarkerLoggingAdapter
-import akka.remote.RemoteTransportException
-import akka.remote.artery.tcp.SecureRandomFactory
-import akka.stream.TLSRole
 import javax.net.ssl.KeyManager
 import javax.net.ssl.KeyManagerFactory
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLEngine
 import javax.net.ssl.TrustManager
 import javax.net.ssl.TrustManagerFactory
+
+import akka.actor.ActorSystem
+import akka.event.Logging
+import akka.event.MarkerLoggingAdapter
+import akka.remote.RemoteTransportException
+import akka.remote.artery.tcp.SecureRandomFactory
+import akka.stream.TLSRole
 
 @deprecated("Classic remoting is deprecated, use Artery", "2.6.0")
 trait SSLEngineProvider {

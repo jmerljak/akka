@@ -1,16 +1,17 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.persistence.typed.scaladsl
+
+import com.typesafe.config.ConfigFactory
+import org.scalatest.wordspec.AnyWordSpecLike
 
 import akka.actor.testkit.typed.scaladsl._
 import akka.actor.typed.ActorRef
 import akka.actor.typed.Behavior
 import akka.persistence.typed.PersistenceId
 import akka.persistence.typed.RecoveryCompleted
-import com.typesafe.config.ConfigFactory
-import org.scalatest.WordSpecLike
 
 object PrimitiveStateSpec {
 
@@ -22,7 +23,7 @@ object PrimitiveStateSpec {
 
 class PrimitiveStateSpec
     extends ScalaTestWithActorTestKit(PrimitiveStateSpec.conf)
-    with WordSpecLike
+    with AnyWordSpecLike
     with LogCapturing {
 
   def primitiveState(persistenceId: PersistenceId, probe: ActorRef[String]): Behavior[Int] =
@@ -46,7 +47,7 @@ class PrimitiveStateSpec
   "A typed persistent actor with primitive state" must {
     "persist primitive events and update state" in {
       val probe = TestProbe[String]()
-      val b = primitiveState(PersistenceId("a"), probe.ref)
+      val b = primitiveState(PersistenceId.ofUniqueId("a"), probe.ref)
       val ref1 = spawn(b)
       probe.expectMessage("onRecoveryCompleted:0")
       ref1 ! 1

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.persistence.typed.internal
@@ -11,7 +11,7 @@ import akka.annotation.InternalApi
  * A [[SideEffect]] is an side effect that can be chained after a main effect.
  *
  * Persist, none and unhandled are main effects. Then any number of
- * call backs can be added to these effects with `andThen`.
+ * call backs can be added to these effects.
  *
  * INTERNAL API
  */

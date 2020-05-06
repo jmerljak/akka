@@ -1,27 +1,33 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster
 
-import akka.actor.Address
+import scala.collection.immutable
+import scala.concurrent.duration._
+
 import com.typesafe.config.ConfigFactory
+
+import akka.actor.Address
 import akka.remote.testkit.MultiNodeConfig
 import akka.remote.testkit.MultiNodeSpec
 import akka.testkit._
-import scala.concurrent.duration._
-import scala.collection.immutable
 
 final case class SingletonClusterMultiNodeConfig(failureDetectorPuppet: Boolean) extends MultiNodeConfig {
   val first = role("first")
   val second = role("second")
 
-  commonConfig(debugConfig(on = false).withFallback(ConfigFactory.parseString("""
+  commonConfig(
+    debugConfig(on = false)
+      .withFallback(ConfigFactory.parseString("""
       akka.cluster {
-        auto-down-unreachable-after = 0s
+        downing-provider-class = akka.cluster.testkit.AutoDowning
+        testkit.auto-down-unreachable-after = 0s
         failure-detector.threshold = 4
       }
-    """)).withFallback(MultiNodeClusterSpec.clusterConfig(failureDetectorPuppet)))
+    """))
+      .withFallback(MultiNodeClusterSpec.clusterConfig(failureDetectorPuppet)))
 
 }
 

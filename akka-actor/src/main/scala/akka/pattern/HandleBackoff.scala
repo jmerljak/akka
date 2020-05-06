@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.pattern
@@ -37,7 +37,8 @@ import akka.annotation.InternalApi
       startChild()
       reset match {
         case AutoReset(resetBackoff) =>
-          context.system.scheduler.scheduleOnce(resetBackoff, self, ResetRestartCount(restartCount))
+          if (restartCount > 0)
+            context.system.scheduler.scheduleOnce(resetBackoff, self, ResetRestartCount(restartCount))
         case _ => // ignore
       }
 
@@ -47,8 +48,8 @@ import akka.annotation.InternalApi
         case msg         => unhandled(msg)
       }
 
-    case ResetRestartCount(current) =>
-      if (current == restartCount) {
+    case ResetRestartCount(seenRestartCount) =>
+      if (seenRestartCount == restartCount && restartCount > 0) {
         restartCount = 0
       }
 

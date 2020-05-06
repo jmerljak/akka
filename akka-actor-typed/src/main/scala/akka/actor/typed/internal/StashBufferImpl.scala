@@ -1,16 +1,15 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed.internal
 
-import java.util.function.Consumer
 import java.util.function.{ Function => JFunction }
-
-import akka.actor.DeadLetter
 
 import scala.annotation.tailrec
 import scala.util.control.NonFatal
+
+import akka.actor.DeadLetter
 import akka.actor.typed.Behavior
 import akka.actor.typed.Signal
 import akka.actor.typed.TypedActorContext
@@ -18,7 +17,9 @@ import akka.actor.typed.javadsl
 import akka.actor.typed.scaladsl
 import akka.actor.typed.scaladsl.ActorContext
 import akka.annotation.{ InternalApi, InternalStableApi }
+import akka.japi.function.Procedure
 import akka.util.{ unused, ConstantFun }
+import akka.util.OptionVal
 
 /**
  * INTERNAL API
@@ -46,6 +47,8 @@ import akka.util.{ unused, ConstantFun }
   import StashBufferImpl.Node
 
   private var _size: Int = if (_first eq null) 0 else 1
+
+  private var currentBehaviorWhenUnstashInProgress: OptionVal[Behavior[T]] = OptionVal.None
 
   override def isEmpty: Boolean = _first eq null
 
@@ -75,6 +78,13 @@ import akka.util.{ unused, ConstantFun }
     this
   }
 
+  override def clear(): Unit = {
+    _first = null
+    _last = null
+    _size = 0
+    stashCleared(ctx)
+  }
+
   @InternalStableApi
   private def createNode(message: T, @unused ctx: scaladsl.ActorContext[T]): Node[T] = {
     new Node(null, message)
@@ -89,6 +99,15 @@ import akka.util.{ unused, ConstantFun }
       _last = null
 
     message
+  }
+
+  @InternalStableApi
+  private def interpretUnstashedMessage(
+      behavior: Behavior[T],
+      ctx: TypedActorContext[T],
+      wrappedMessage: T,
+      @unused node: Node[T]): Behavior[T] = {
+    Behavior.interpretMessage(behavior, ctx, wrappedMessage)
   }
 
   private def rawHead: Node[T] =
@@ -107,7 +126,7 @@ import akka.util.{ unused, ConstantFun }
     }
   }
 
-  override def forEach(f: Consumer[T]): Unit = foreach(f.accept)
+  override def forEach(f: Procedure[T]): Unit = foreach(f.apply)
 
   override def unstashAll(behavior: Behavior[T]): Behavior[T] = {
     val behav = unstash(behavior, size, ConstantFun.scalaIdentityFunction[T])
@@ -119,31 +138,43 @@ import akka.util.{ unused, ConstantFun }
     if (isEmpty)
       behavior // optimization
     else {
-      val iter = new Iterator[T] {
-        override def hasNext: Boolean = StashBufferImpl.this.nonEmpty
-        override def next(): T = {
-          val next = StashBufferImpl.this.dropHeadForUnstash()
-          unstashed(ctx, next)
-          wrap(next.message)
-        }
-      }.take(math.min(numberOfMessages, size))
-      interpretUnstashedMessages(behavior, ctx, iter)
+      // currentBehaviorWhenUnstashInProgress is needed to keep track of current Behavior for Behaviors.same
+      // when unstash is called when a previous unstash is already in progress (in same call stack)
+      val unstashAlreadyInProgress = currentBehaviorWhenUnstashInProgress.isDefined
+      try {
+        val iter = new Iterator[Node[T]] {
+          override def hasNext: Boolean = StashBufferImpl.this.nonEmpty
+
+          override def next(): Node[T] = {
+            val next = StashBufferImpl.this.dropHeadForUnstash()
+            unstashed(ctx, next)
+            next
+          }
+        }.take(math.min(numberOfMessages, size))
+        interpretUnstashedMessages(behavior, ctx, iter, wrap)
+      } finally {
+        if (!unstashAlreadyInProgress)
+          currentBehaviorWhenUnstashInProgress = OptionVal.None
+      }
     }
   }
 
   private def interpretUnstashedMessages(
       behavior: Behavior[T],
       ctx: TypedActorContext[T],
-      messages: Iterator[T]): Behavior[T] = {
+      messages: Iterator[Node[T]],
+      wrap: T => T): Behavior[T] = {
     @tailrec def interpretOne(b: Behavior[T]): Behavior[T] = {
       val b2 = Behavior.start(b, ctx)
+      currentBehaviorWhenUnstashInProgress = OptionVal.Some(b2)
       if (!Behavior.isAlive(b2) || !messages.hasNext) b2
       else {
-        val message = messages.next()
+        val node = messages.next()
+        val message = wrap(node.message)
         val interpretResult = try {
           message match {
             case sig: Signal => Behavior.interpretSignal(b2, ctx, sig)
-            case msg         => Behavior.interpretMessage(b2, ctx, msg)
+            case msg         => interpretUnstashedMessage(b2, ctx, msg, node)
           }
         } catch {
           case NonFatal(e) => throw UnstashException(e, b2)
@@ -161,7 +192,7 @@ import akka.util.{ unused, ConstantFun }
         if (Behavior.isAlive(actualNext))
           interpretOne(Behavior.canonicalize(actualNext, b2, ctx)) // recursive
         else {
-          unstashRestToDeadLetters(ctx, messages)
+          unstashRestToDeadLetters(ctx, messages, wrap)
           actualNext
         }
       }
@@ -172,23 +203,26 @@ import akka.util.{ unused, ConstantFun }
       if (Behavior.isUnhandled(started))
         throw new IllegalArgumentException("Cannot unstash with unhandled as starting behavior")
       else if (started == BehaviorImpl.same) {
-        ctx.asScala.currentBehavior
+        currentBehaviorWhenUnstashInProgress match {
+          case OptionVal.None    => ctx.asScala.currentBehavior
+          case OptionVal.Some(c) => c
+        }
       } else started
 
     if (Behavior.isAlive(actualInitialBehavior)) {
       interpretOne(actualInitialBehavior)
     } else {
-      unstashRestToDeadLetters(ctx, messages)
+      unstashRestToDeadLetters(ctx, messages, wrap)
       started
     }
   }
 
-  private def unstashRestToDeadLetters(ctx: TypedActorContext[T], messages: Iterator[T]): Unit = {
+  private def unstashRestToDeadLetters(ctx: TypedActorContext[T], messages: Iterator[Node[T]], wrap: T => T): Unit = {
     val scalaCtx = ctx.asScala
     import akka.actor.typed.scaladsl.adapter._
     val classicDeadLetters = scalaCtx.system.deadLetters.toClassic
-    messages.foreach(msg =>
-      scalaCtx.system.deadLetters ! DeadLetter(msg, classicDeadLetters, ctx.asScala.self.toClassic))
+    messages.foreach(node =>
+      scalaCtx.system.deadLetters ! DeadLetter(wrap(node.message), classicDeadLetters, ctx.asScala.self.toClassic))
   }
 
   override def unstash(behavior: Behavior[T], numberOfMessages: Int, wrap: JFunction[T, T]): Behavior[T] =

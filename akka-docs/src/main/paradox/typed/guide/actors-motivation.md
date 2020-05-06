@@ -4,9 +4,9 @@ The actor model was proposed decades ago by @extref[Carl Hewitt](wikipedia:Carl_
 
 Today, the actor model is not only recognized as a highly effective solution &#8212; it has been proven in production for some of the world's most demanding applications. To highlight issues that the actor model addresses, this topic discusses the following mismatches between traditional programming assumptions and the reality of modern multi-threaded, multi-CPU architectures:
 
-* [The challenge of encapsulation](#the-illusion-of-encapsulation)
-* [The illusion of shared memory on modern computer architectures](#The-illusion-of-shared-memory-on-modern-computer-architectures)
-* [The illusion of a call stack](#the-illusion-of-a-call-stack)
+* @ref:[The challenge of encapsulation](#the-challenge-of-encapsulation)
+* @ref:[The illusion of shared memory on modern computer architectures](#the-illusion-of-shared-memory-on-modern-computer-architectures)
+* @ref:[The illusion of a call stack](#the-illusion-of-a-call-stack)
 
 
 ## The challenge of encapsulation
@@ -150,7 +150,7 @@ involved (where message losses are to be expected).**
    other in an efficient way without blocking. With this style of task-delegating concurrency
    (and even more so with networked/distributed computing) call stack-based error handling breaks down and new,
    explicit error signaling mechanisms need to be introduced. Failures become part of the domain model.**
- * **Concurrent systems with work delegation needs to handle service faults and have principled means to recover from them.
+ * **Concurrent systems with work delegation need to handle service faults and have principled means to recover from them.
    Clients of such services need to be aware that tasks/messages might get lost during restarts.
    Even if loss does not happen, a response might be delayed arbitrarily due to previously enqueued tasks
    (a long queue), delays caused by garbage collection, etc. In face of these, concurrent systems should handle response

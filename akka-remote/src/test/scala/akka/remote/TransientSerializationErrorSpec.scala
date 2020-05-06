@@ -1,16 +1,17 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote
 
 import java.io.NotSerializableException
 
+import com.typesafe.config.{ Config, ConfigFactory }
+
 import akka.actor.{ ActorSystem, ExtendedActorSystem, RootActorPath }
 import akka.serialization.SerializerWithStringManifest
 import akka.testkit.{ AkkaSpec, TestActors, TestKit }
 import akka.util.unused
-import com.typesafe.config.{ Config, ConfigFactory }
 
 object TransientSerializationErrorSpec {
   object ManifestNotSerializable
@@ -53,7 +54,6 @@ abstract class AbstractTransientSerializationErrorSpec(config: Config)
       actor {
         provider = remote
         warn-about-java-serializer-usage = off
-        serialize-creators = off
         serializers {
           test = "akka.remote.TransientSerializationErrorSpec$TestSerializer"
         }

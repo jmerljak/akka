@@ -1,12 +1,13 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote.artery.compress
 
-import org.scalatest.{ Matchers, WordSpecLike }
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpecLike
 
-class HeavyHittersSpec extends WordSpecLike with Matchers {
+class HeavyHittersSpec extends AnyWordSpecLike with Matchers {
 
   "TopHeavyHitters" must {
     "should work" in {

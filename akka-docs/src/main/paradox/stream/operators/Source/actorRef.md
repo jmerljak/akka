@@ -1,14 +1,12 @@
-# actorRef
+# Source.actorRef
 
 Materialize an `ActorRef`; sending messages to it will emit them on the stream.
 
 @ref[Source operators](../index.md#source-operators)
 
-@@@ div { .group-scala }
 ## Signature
 
-@@signature [Source.scala](/akka-stream/src/main/scala/akka/stream/scaladsl/Source.scala) { #actorRef }
-@@@
+@apidoc[Source.actorRef](Source$) { scala="#actorRef[T](completionMatcher:PartialFunction[Any,akka.stream.CompletionStrategy],failureMatcher:PartialFunction[Any,Throwable],bufferSize:Int,overflowStrategy:akka.stream.OverflowStrategy):akka.stream.scaladsl.Source[T,akka.actor.ActorRef]" java="#actorRef(akka.japi.function.Function,akka.japi.function.Function,int,akka.stream.OverflowStrategy)" }
 
 ## Description
 
@@ -23,6 +21,16 @@ already buffered elements will be sent out before signaling completion.
 Sending `akka.actor.PoisonPill` will signal completion immediately but this behavior is deprecated and scheduled to be removed.
 Using `akka.actor.ActorSystem.stop` to stop the actor and complete the stream is *not supported*.
 
+## Examples
+
+Scala
+:  @@snip [actorRef.scala](/akka-docs/src/test/scala/docs/stream/operators/SourceOperators.scala) { #actorRef }
+
+Java
+:  @@snip [actorRef.java](/akka-docs/src/test/java/jdocs/stream/operators/SourceDocExamples.java) { #actor-ref-imports #actor-ref }
+
+## Reactive Streams semantics
+
 @@@div { .callout }
 
 **emits** when there is demand and there are messages in the buffer or a message is sent to the `ActorRef`
@@ -30,12 +38,3 @@ Using `akka.actor.ActorSystem.stop` to stop the actor and complete the stream is
 **completes** when the actor is stopped by sending it a particular message as described above
 
 @@@
-
-## Examples
-
-
-Scala
-:  @@snip [actorRef.scala](/akka-docs/src/test/scala/docs/stream/operators/SourceOperators.scala) { #actorRef }
-
-Java
-:  @@snip [actorRef.java](/akka-docs/src/test/java/jdocs/stream/operators/SourceDocExamples.java) { #actor-ref-imports #actor-ref }

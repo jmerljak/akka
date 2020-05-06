@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote.artery
@@ -16,20 +16,7 @@ import scala.collection.immutable
 import scala.concurrent.{ Await, Future }
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
-import akka.Done
-import akka.actor.Address
-import akka.actor.Cancellable
-import akka.actor.ExtendedActorSystem
-import akka.event.Logging
-import akka.remote.RemoteActorRefProvider
-import akka.remote.RemoteTransportException
-import akka.remote.artery.compress._
-import akka.stream.KillSwitches
-import akka.stream.scaladsl.Flow
-import akka.stream.scaladsl.Keep
-import akka.stream.scaladsl.Sink
-import akka.stream.scaladsl.Source
-import akka.util.ccompat._
+
 import io.aeron.Aeron
 import io.aeron.AvailableImageHandler
 import io.aeron.CncFileDescriptor
@@ -47,6 +34,21 @@ import org.agrona.IoUtil
 import org.agrona.concurrent.BackoffIdleStrategy
 import org.agrona.concurrent.status.CountersReader.MetaData
 
+import akka.Done
+import akka.actor.Address
+import akka.actor.Cancellable
+import akka.actor.ExtendedActorSystem
+import akka.event.Logging
+import akka.remote.RemoteActorRefProvider
+import akka.remote.RemoteTransportException
+import akka.remote.artery.compress._
+import akka.stream.KillSwitches
+import akka.stream.scaladsl.Flow
+import akka.stream.scaladsl.Keep
+import akka.stream.scaladsl.Sink
+import akka.stream.scaladsl.Source
+import akka.util.ccompat._
+
 /**
  * INTERNAL API
  */
@@ -56,7 +58,6 @@ private[remote] class ArteryAeronUdpTransport(_system: ExtendedActorSystem, _pro
   import AeronSource.AeronLifecycle
   import ArteryTransport._
   import Decoder.InboundCompressionAccess
-  import FlightRecorderEvents._
 
   override type LifeCycle = AeronLifecycle
 
@@ -74,12 +75,12 @@ private[remote] class ArteryAeronUdpTransport(_system: ExtendedActorSystem, _pro
     startMediaDriver()
     startAeron()
     startAeronErrorLog()
-    topLevelFlightRecorder.loFreq(Transport_AeronErrorLogStarted, NoMetaData)
+    flightRecorder.transportAeronErrorLogStarted()
     if (settings.Advanced.Aeron.LogAeronCounters) {
       startAeronCounterLog()
     }
     taskRunner.start()
-    topLevelFlightRecorder.loFreq(Transport_TaskRunnerStarted, NoMetaData)
+    flightRecorder.transportTaskRunnerStarted()
   }
 
   private def startMediaDriver(): Unit = {
@@ -105,24 +106,33 @@ private[remote] class ArteryAeronUdpTransport(_system: ExtendedActorSystem, _pro
           .conductorIdleStrategy(new BackoffIdleStrategy(1, 1, 1, 1))
           .receiverIdleStrategy(TaskRunner.createIdleStrategy(idleCpuLevel))
           .senderIdleStrategy(TaskRunner.createIdleStrategy(idleCpuLevel))
+          .conductorThreadFactory(system.threadFactory)
+          .receiverThreadFactory(system.threadFactory)
+          .senderThreadFactory(system.threadFactory)
       } else if (idleCpuLevel == 1) {
         driverContext
           .threadingMode(ThreadingMode.SHARED)
           .sharedIdleStrategy(TaskRunner.createIdleStrategy(idleCpuLevel))
+          .sharedThreadFactory(system.threadFactory)
       } else if (idleCpuLevel <= 7) {
         driverContext
           .threadingMode(ThreadingMode.SHARED_NETWORK)
           .sharedNetworkIdleStrategy(TaskRunner.createIdleStrategy(idleCpuLevel))
+          .sharedNetworkThreadFactory(system.threadFactory)
+          .conductorThreadFactory(system.threadFactory)
       } else {
         driverContext
           .threadingMode(ThreadingMode.DEDICATED)
           .receiverIdleStrategy(TaskRunner.createIdleStrategy(idleCpuLevel))
           .senderIdleStrategy(TaskRunner.createIdleStrategy(idleCpuLevel))
+          .receiverThreadFactory(system.threadFactory)
+          .senderThreadFactory(system.threadFactory)
+          .conductorThreadFactory(system.threadFactory)
       }
 
       val driver = MediaDriver.launchEmbedded(driverContext)
       log.info("Started embedded media driver in directory [{}]", driver.aeronDirectoryName)
-      topLevelFlightRecorder.loFreq(Transport_MediaDriverStarted, driver.aeronDirectoryName())
+      flightRecorder.transportMediaDriverStarted(driver.aeronDirectoryName())
       if (!mediaDriver.compareAndSet(None, Some(driver))) {
         throw new IllegalStateException("media driver started more than once")
       }
@@ -149,7 +159,7 @@ private[remote] class ArteryAeronUdpTransport(_system: ExtendedActorSystem, _pro
       try {
         if (settings.Advanced.Aeron.DeleteAeronDirectory) {
           IoUtil.delete(new File(driver.aeronDirectoryName), false)
-          topLevelFlightRecorder.loFreq(Transport_MediaFileDeleted, NoMetaData)
+          flightRecorder.transportMediaFileDeleted()
         }
       } catch {
         case NonFatal(e) =>
@@ -166,6 +176,7 @@ private[remote] class ArteryAeronUdpTransport(_system: ExtendedActorSystem, _pro
     val ctx = new Aeron.Context
 
     ctx.driverTimeoutMs(settings.Advanced.Aeron.DriverTimeout.toMillis)
+    ctx.threadFactory(system.threadFactory)
 
     ctx.availableImageHandler(new AvailableImageHandler {
       override def onAvailableImage(img: Image): Unit = {
@@ -297,7 +308,7 @@ private[remote] class ArteryAeronUdpTransport(_system: ExtendedActorSystem, _pro
         taskRunner,
         bufferPool,
         giveUpAfter,
-        IgnoreEventSink))
+        flightRecorder))
   }
 
   private def aeronSource(
@@ -305,7 +316,7 @@ private[remote] class ArteryAeronUdpTransport(_system: ExtendedActorSystem, _pro
       pool: EnvelopeBufferPool,
       inboundChannel: String): Source[EnvelopeBuffer, AeronSource.AeronLifecycle] =
     Source.fromGraph(
-      new AeronSource(inboundChannel, streamId, aeron, taskRunner, pool, IgnoreEventSink, aeronSourceSpinningStrategy))
+      new AeronSource(inboundChannel, streamId, aeron, taskRunner, pool, flightRecorder, aeronSourceSpinningStrategy))
 
   private def aeronSourceSpinningStrategy: Int =
     if (settings.Advanced.InboundLanes > 1 || // spinning was identified to be the cause of massive slowdowns with multiple lanes, see #21365
@@ -441,10 +452,10 @@ private[remote] class ArteryAeronUdpTransport(_system: ExtendedActorSystem, _pro
     taskRunner
       .stop()
       .map { _ =>
-        topLevelFlightRecorder.loFreq(Transport_Stopped, NoMetaData)
+        flightRecorder.transportStopped()
         if (aeronErrorLogTask != null) {
           aeronErrorLogTask.cancel()
-          topLevelFlightRecorder.loFreq(Transport_AeronErrorLogTaskStopped, NoMetaData)
+          flightRecorder.transportAeronErrorLogTaskStopped()
         }
         if (aeron != null) aeron.close()
         if (aeronErrorLog != null) aeronErrorLog.close()
@@ -455,8 +466,8 @@ private[remote] class ArteryAeronUdpTransport(_system: ExtendedActorSystem, _pro
   }
 
   def autoSelectPort(hostname: String): Int = {
-    import java.nio.channels.DatagramChannel
     import java.net.InetSocketAddress
+    import java.nio.channels.DatagramChannel
 
     val socket = DatagramChannel.open().socket()
     socket.bind(new InetSocketAddress(hostname, 0))

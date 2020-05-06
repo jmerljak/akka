@@ -1,18 +1,17 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.routing
 
 import java.util.concurrent.ConcurrentHashMap
+
 import scala.concurrent.Await
+
 import akka.actor.{ Actor, Props }
 import akka.testkit.{ AkkaSpec, DefaultTimeout, ImplicitSender, TestLatch }
 
-class SmallestMailboxSpec
-    extends AkkaSpec("akka.actor.serialize-messages = off")
-    with DefaultTimeout
-    with ImplicitSender {
+class SmallestMailboxSpec extends AkkaSpec with DefaultTimeout with ImplicitSender {
 
   "smallest mailbox pool" must {
 

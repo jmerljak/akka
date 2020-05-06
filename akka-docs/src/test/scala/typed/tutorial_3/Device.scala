@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package typed.tutorial_3
@@ -31,7 +31,7 @@ object Device {
 }
 
 class Device(context: ActorContext[Device.Command], groupId: String, deviceId: String)
-    extends AbstractBehavior[Device.Command] {
+    extends AbstractBehavior[Device.Command](context) {
   import Device._
 
   var lastTemperatureReading: Option[Double] = None

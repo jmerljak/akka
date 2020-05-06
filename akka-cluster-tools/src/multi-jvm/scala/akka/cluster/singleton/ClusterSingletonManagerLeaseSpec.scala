@@ -1,19 +1,20 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster.singleton
 
+import scala.concurrent.duration._
+
+import com.typesafe.config.ConfigFactory
+
 import akka.actor.{ Actor, ActorIdentity, ActorLogging, ActorRef, Address, Identify, PoisonPill, Props }
+import akka.cluster._
 import akka.cluster.MemberStatus.Up
 import akka.cluster.TestLeaseActor._
 import akka.cluster.singleton.ClusterSingletonManagerLeaseSpec.ImportantSingleton.Response
-import akka.cluster._
 import akka.remote.testkit.{ MultiNodeConfig, MultiNodeSpec, STMultiNodeSpec }
 import akka.testkit._
-import com.typesafe.config.ConfigFactory
-
-import scala.concurrent.duration._
 
 object ClusterSingletonManagerLeaseSpec extends MultiNodeConfig {
   val controller = role("controller")
@@ -28,7 +29,8 @@ object ClusterSingletonManagerLeaseSpec extends MultiNodeConfig {
     akka.loglevel = INFO
     akka.actor.provider = "cluster"
     akka.remote.log-remote-lifecycle-events = off
-    akka.cluster.auto-down-unreachable-after = 0s
+    akka.cluster.downing-provider-class = akka.cluster.testkit.AutoDowning
+    akka.cluster.testkit.auto-down-unreachable-after = 0s
     test-lease {
         lease-class = akka.cluster.TestLeaseActorClient
         heartbeat-interval = 1s
@@ -75,8 +77,8 @@ class ClusterSingletonManagerLeaseSpec
     with ImplicitSender
     with MultiNodeClusterSpec {
 
-  import ClusterSingletonManagerLeaseSpec.ImportantSingleton._
   import ClusterSingletonManagerLeaseSpec._
+  import ClusterSingletonManagerLeaseSpec.ImportantSingleton._
 
   override def initialParticipants = roles.size
 

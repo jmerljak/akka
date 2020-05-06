@@ -1,18 +1,22 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster.ddata
 
+import scala.concurrent.Await
 import scala.concurrent.duration._
 
+import com.typesafe.config.ConfigFactory
+
 import akka.cluster.Cluster
+import akka.pattern.ask
 import akka.remote.testconductor.RoleName
 import akka.remote.testkit.MultiNodeConfig
 import akka.remote.testkit.MultiNodeSpec
 import akka.remote.transport.ThrottlerTransportAdapter.Direction
 import akka.testkit._
-import com.typesafe.config.ConfigFactory
+import akka.util.Timeout
 
 object ReplicatorSpec extends MultiNodeConfig {
   val first = role("first")
@@ -35,13 +39,13 @@ class ReplicatorSpecMultiJvmNode2 extends ReplicatorSpec
 class ReplicatorSpecMultiJvmNode3 extends ReplicatorSpec
 
 class ReplicatorSpec extends MultiNodeSpec(ReplicatorSpec) with STMultiNodeSpec with ImplicitSender {
-  import ReplicatorSpec._
   import Replicator._
+  import ReplicatorSpec._
 
   override def initialParticipants = roles.size
 
   val cluster = Cluster(system)
-  implicit val selfUniqueAddress = DistributedData(system).selfUniqueAddress
+  implicit val selfUniqueAddress: SelfUniqueAddress = DistributedData(system).selfUniqueAddress
   val replicator = system.actorOf(
     Replicator.props(ReplicatorSettings(system).withGossipInterval(1.second).withMaxDeltaElements(10)),
     "replicator")
@@ -64,6 +68,7 @@ class ReplicatorSpec extends MultiNodeSpec(ReplicatorSpec) with STMultiNodeSpec 
   val KeyH = ORMapKey[String, Flag]("H")
   val KeyI = GSetKey[String]("I")
   val KeyJ = GSetKey[String]("J")
+  val KeyK = LWWRegisterKey[String]("K")
   val KeyX = GCounterKey("X")
   val KeyY = GCounterKey("Y")
   val KeyZ = GCounterKey("Z")
@@ -73,6 +78,8 @@ class ReplicatorSpec extends MultiNodeSpec(ReplicatorSpec) with STMultiNodeSpec 
     afterCounter += 1
     enterBarrier("after-" + afterCounter)
   }
+
+  private implicit val askTimeout: Timeout = 5.seconds
 
   def join(from: RoleName, to: RoleName): Unit = {
     runOn(from) {
@@ -144,13 +151,24 @@ class ReplicatorSpec extends MultiNodeSpec(ReplicatorSpec) with STMultiNodeSpec 
         expectMsg(DeleteSuccess(KeyX, Some(777)))
         changedProbe.expectMsg(Deleted(KeyX))
         replicator ! Get(KeyX, ReadLocal, Some(789))
-        expectMsg(DataDeleted(KeyX, Some(789)))
+        expectMsg(GetDataDeleted(KeyX, Some(789)))
         replicator ! Get(KeyX, readAll, Some(456))
-        expectMsg(DataDeleted(KeyX, Some(456)))
+        expectMsg(GetDataDeleted(KeyX, Some(456)))
+        // verify ask-mapTo for GetDataDeleted, issue #27371
+        Await
+          .result((replicator ? Get(KeyX, ReadLocal, None)).mapTo[GetResponse[GCounter]], askTimeout.duration)
+          .getClass should be(classOf[GetDataDeleted[GCounter]])
+
         replicator ! Update(KeyX, GCounter(), WriteLocal, Some(123))(_ :+ 1)
-        expectMsg(DataDeleted(KeyX, Some(123)))
+        expectMsg(UpdateDataDeleted(KeyX, Some(123)))
         replicator ! Delete(KeyX, WriteLocal, Some(555))
         expectMsg(DataDeleted(KeyX, Some(555)))
+        // verify ask-mapTo for UpdateDataDeleted, issue #27371
+        Await
+          .result(
+            (replicator ? Update(KeyX, GCounter(), WriteLocal, Some(123))(_ :+ 1)).mapTo[UpdateResponse[GCounter]],
+            askTimeout.duration)
+          .getClass should be(classOf[UpdateDataDeleted[GCounter]])
 
         replicator ! GetKeyIds
         expectMsg(GetKeyIdsResult(Set("A")))
@@ -309,7 +327,7 @@ class ReplicatorSpec extends MultiNodeSpec(ReplicatorSpec) with STMultiNodeSpec 
           c.value should be(31)
 
           replicator ! Get(KeyY, ReadLocal, Some(777))
-          expectMsg(DataDeleted(KeyY, Some(777)))
+          expectMsg(GetDataDeleted(KeyY, Some(777)))
         }
       }
       changedProbe.expectMsgPF() { case c @ Changed(KeyC) => c.get(KeyC).value } should be(31)
@@ -571,6 +589,50 @@ class ReplicatorSpec extends MultiNodeSpec(ReplicatorSpec) with STMultiNodeSpec 
     }
 
     changedProbe.expectNoMessage(1.second)
+
+    enterBarrierAfterTestStep()
+  }
+
+  "support prefer oldest members" in {
+    // disable gossip and delta replication to only verify the write and read operations
+    val oldestReplicator = system.actorOf(
+      Replicator.props(
+        ReplicatorSettings(system).withPreferOldest(true).withGossipInterval(1.minute).withDeltaCrdtEnabled(false)),
+      "oldestReplicator")
+    within(5.seconds) {
+      val countProbe = TestProbe()
+      awaitAssert {
+        oldestReplicator.tell(GetReplicaCount, countProbe.ref)
+        countProbe.expectMsg(ReplicaCount(3))
+      }
+    }
+    enterBarrier("oldest-replicator-started")
+
+    val probe = TestProbe()
+
+    runOn(second) {
+      oldestReplicator.tell(
+        Update(KeyK, LWWRegister(selfUniqueAddress, "0"), writeTwo)(_.withValue(selfUniqueAddress, "1")),
+        probe.ref)
+      probe.expectMsg(UpdateSuccess(KeyK, None))
+    }
+    enterBarrier("updated-1")
+
+    runOn(first) {
+      // replicated to oldest
+      oldestReplicator.tell(Get(KeyK, ReadLocal), probe.ref)
+      probe.expectMsgType[GetSuccess[LWWRegister[String]]].dataValue.value should ===("1")
+    }
+
+    runOn(third) {
+      // not replicated to third (not among the two oldest)
+      oldestReplicator.tell(Get(KeyK, ReadLocal), probe.ref)
+      probe.expectMsg(NotFound(KeyK, None))
+
+      // read from oldest
+      oldestReplicator.tell(Get(KeyK, readTwo), probe.ref)
+      probe.expectMsgType[GetSuccess[LWWRegister[String]]].dataValue.value should ===("1")
+    }
 
     enterBarrierAfterTestStep()
   }

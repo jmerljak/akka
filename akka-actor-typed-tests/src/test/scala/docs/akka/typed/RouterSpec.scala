@@ -1,19 +1,16 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package docs.akka.typed
 
+import akka.actor.typed.DispatcherSelector
 // #pool
-import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import akka.actor.testkit.typed.scaladsl.LogCapturing
-import akka.actor.typed.Behavior
-import akka.actor.typed.SupervisorStrategy
-import akka.actor.typed.receptionist.Receptionist
-import akka.actor.typed.receptionist.ServiceKey
-import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.scaladsl.Routers
-import org.scalatest.WordSpecLike
+import akka.actor.testkit.typed.scaladsl.{ LogCapturing, ScalaTestWithActorTestKit }
+import akka.actor.typed.{ Behavior, SupervisorStrategy }
+import akka.actor.typed.receptionist.{ Receptionist, ServiceKey }
+import akka.actor.typed.scaladsl.{ Behaviors, Routers }
+import org.scalatest.wordspec.AnyWordSpecLike
 
 // #pool
 
@@ -36,11 +33,13 @@ object RouterSpec {
   }
 
   // #pool
-
+  // #group
   val serviceKey = ServiceKey[Worker.Command]("log-worker")
+
+  // #group
 }
 
-class RouterSpec extends ScalaTestWithActorTestKit("akka.loglevel=warning") with WordSpecLike with LogCapturing {
+class RouterSpec extends ScalaTestWithActorTestKit("akka.loglevel=warning") with AnyWordSpecLike with LogCapturing {
   import RouterSpec._
 
   "The routing sample" must {
@@ -57,7 +56,7 @@ class RouterSpec extends ScalaTestWithActorTestKit("akka.loglevel=warning") with
 
       spawn(Behaviors.setup[Unit] { ctx =>
         // #pool
-        val pool = Routers.pool(poolSize = 4)(() =>
+        val pool = Routers.pool(poolSize = 4)(
           // make sure the workers are restarted if they fail
           Behaviors.supervise(Worker()).onFailure[Exception](SupervisorStrategy.restart))
         val router = ctx.spawn(pool, "worker-pool")
@@ -66,6 +65,15 @@ class RouterSpec extends ScalaTestWithActorTestKit("akka.loglevel=warning") with
           router ! Worker.DoLog(s"msg $n")
         }
         // #pool
+
+        // #pool-dispatcher
+        // make sure workers use the default blocking IO dispatcher
+        val blockingPool = pool.withRouteeProps(routeeProps = DispatcherSelector.blocking())
+        // spawn head router using the same executor as the parent
+        val blockingRouter = ctx.spawn(blockingPool, "blocking-pool", DispatcherSelector.sameAsParent())
+        // #pool-dispatcher
+
+        blockingRouter ! Worker.DoLog("msg")
 
         // #strategy
         val alternativePool = pool.withPoolSize(2).withRoundRobinRouting()
@@ -77,7 +85,7 @@ class RouterSpec extends ScalaTestWithActorTestKit("akka.loglevel=warning") with
         Behaviors.empty
       })
 
-      probe.receiveMessages(10)
+      probe.receiveMessages(11)
     }
 
     "show group routing" in {
@@ -97,8 +105,8 @@ class RouterSpec extends ScalaTestWithActorTestKit("akka.loglevel=warning") with
         val worker = ctx.spawn(Worker(), "worker")
         ctx.system.receptionist ! Receptionist.Register(serviceKey, worker)
 
-        val group = Routers.group(serviceKey);
-        val router = ctx.spawn(group, "worker-group");
+        val group = Routers.group(serviceKey)
+        val router = ctx.spawn(group, "worker-group")
 
         // the group router will stash messages until it sees the first listing of registered
         // services from the receptionist, so it is safe to send messages right away

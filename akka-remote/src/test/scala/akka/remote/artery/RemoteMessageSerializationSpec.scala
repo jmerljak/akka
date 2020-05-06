@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote.artery
@@ -7,13 +7,14 @@ package akka.remote.artery
 import java.io.NotSerializableException
 import java.util.concurrent.ThreadLocalRandom
 
+import scala.concurrent.duration._
+
+import com.github.ghik.silencer.silent
+
 import akka.actor.{ Actor, ActorRef, PoisonPill, Props }
 import akka.remote.{ AssociationErrorEvent, DisassociatedEvent, OversizedPayloadException, RARP }
 import akka.testkit.{ EventFilter, ImplicitSender, TestActors }
 import akka.util.ByteString
-import com.github.ghik.silencer.silent
-
-import scala.concurrent.duration._
 
 object RemoteMessageSerializationSpec {
   class ProxyActor(val one: ActorRef, val another: ActorRef) extends Actor {
@@ -24,10 +25,7 @@ object RemoteMessageSerializationSpec {
   }
 }
 
-class RemoteMessageSerializationSpec extends ArteryMultiNodeSpec("""
-    akka.actor.serialize-messages = off
-    akka.actor.serialize-creators = off
-  """) with ImplicitSender {
+class RemoteMessageSerializationSpec extends ArteryMultiNodeSpec with ImplicitSender {
 
   val maxPayloadBytes = RARP(system).provider.remoteSettings.Artery.Advanced.MaximumFrameSize
 

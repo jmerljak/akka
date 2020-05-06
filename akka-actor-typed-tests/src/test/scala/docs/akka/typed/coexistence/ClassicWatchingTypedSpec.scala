@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package docs.akka.typed.coexistence
@@ -17,7 +17,7 @@ import akka.testkit.TestProbe
 //#import-alias
 import akka.{ actor => classic }
 //#import-alias
-import org.scalatest.WordSpec
+import org.scalatest.wordspec.AnyWordSpec
 
 import scala.concurrent.duration._
 
@@ -38,6 +38,7 @@ object ClassicWatchingTypedSpec {
     // self can be used as the `replyTo` parameter here because
     // there is an implicit conversion from akka.actor.ActorRef to
     // akka.actor.typed.ActorRef
+    // An equal alternative would be `self.toTyped`
     second ! Typed.Ping(self)
 
     override def receive = {
@@ -72,7 +73,7 @@ object ClassicWatchingTypedSpec {
   //#typed
 }
 
-class ClassicWatchingTypedSpec extends WordSpec with LogCapturing {
+class ClassicWatchingTypedSpec extends AnyWordSpec with LogCapturing {
 
   import ClassicWatchingTypedSpec._
 

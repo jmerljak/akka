@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster.sharding
@@ -96,7 +96,7 @@ private[akka] object Shard {
   final case class LeaseAcquireResult(acquired: Boolean, reason: Option[Throwable]) extends DeadLetterSuppression
   final case class LeaseLost(reason: Option[Throwable]) extends DeadLetterSuppression
 
-  final case object LeaseRetry extends DeadLetterSuppression
+  case object LeaseRetry extends DeadLetterSuppression
   private val LeaseRetryTimer = "lease-retry"
 
   object State {
@@ -184,9 +184,10 @@ private[akka] class Shard(
   import ShardRegion.Passivate
   import ShardRegion.ShardInitialized
   import ShardRegion.handOffStopperProps
+  import settings.tuningParameters._
+
   import akka.cluster.sharding.ShardCoordinator.Internal.CoordinatorMessage
   import akka.cluster.sharding.ShardRegion.ShardRegionCommand
-  import settings.tuningParameters._
 
   var state = State.Empty
   var idByRef = Map.empty[ActorRef, EntityId]
@@ -198,7 +199,7 @@ private[akka] class Shard(
   private var handOffStopper: Option[ActorRef] = None
 
   import context.dispatcher
-  val passivateIdleTask = if (settings.passivateIdleEntityAfter > Duration.Zero && !settings.rememberEntities) {
+  val passivateIdleTask = if (settings.shouldPassivateIdleEntities) {
     val idleInterval = settings.passivateIdleEntityAfter / 2
     Some(context.system.scheduler.scheduleWithFixedDelay(idleInterval, idleInterval, self, PassivateIdleTick))
   } else {
@@ -359,8 +360,9 @@ private[akka] class Shard(
     case None =>
       log.debug("HandOff shard [{}]", shardId)
 
-      if (state.entities.nonEmpty) {
+      if (idByRef.nonEmpty) {
         val entityHandOffTimeout = (settings.tuningParameters.handOffTimeout - 5.seconds).max(1.seconds)
+        log.debug("Starting HandOffStopper for shard [{}] to terminate [{}] entities.", shardId, idByRef.keySet.size)
         handOffStopper = Some(
           context.watch(context.actorOf(
             handOffStopperProps(shardId, replyTo, idByRef.keySet, handOffStopMessage, entityHandOffTimeout))))
@@ -581,6 +583,7 @@ private[akka] trait RememberingShard {
   import Shard._
   import ShardRegion.EntityId
   import ShardRegion.Msg
+
   import akka.pattern.pipe
 
   protected val settings: ClusterShardingSettings
@@ -779,8 +782,8 @@ private[akka] class DDataShard(
   private val writeMajority = WriteMajority(settings.tuningParameters.updatingStateTimeout, majorityMinCap)
   private val maxUpdateAttempts = 3
 
-  implicit private val node = Cluster(context.system)
-  implicit private val selfUniqueAddress = SelfUniqueAddress(node.selfUniqueAddress)
+  implicit private val node: Cluster = Cluster(context.system)
+  implicit private val selfUniqueAddress: SelfUniqueAddress = SelfUniqueAddress(node.selfUniqueAddress)
 
   // The default maximum-frame-size is 256 KiB with Artery.
   // When using entity identifiers with 36 character strings (e.g. UUID.randomUUID).
@@ -1008,6 +1011,7 @@ final class ConstantRateEntityRecoveryStrategy(
 
   import ShardRegion.EntityId
   import actorSystem.dispatcher
+
   import akka.pattern.after
 
   override def recoverEntities(entities: Set[EntityId]): Set[Future[Set[EntityId]]] =

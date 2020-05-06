@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote.artery
@@ -7,23 +7,24 @@ package akka.remote.artery
 import scala.concurrent.duration._
 
 import com.typesafe.config.ConfigFactory
+
 import akka.actor.Actor
 import akka.actor.ActorIdentity
 import akka.actor.ActorRef
+import akka.actor.ActorSelection
 import akka.actor.Deploy
 import akka.actor.Identify
 import akka.actor.PoisonPill
 import akka.actor.Props
 import akka.actor.RootActorPath
 import akka.actor.Terminated
-import akka.testkit.ImplicitSender
-import akka.testkit.TestProbe
-import akka.actor.ActorSelection
-import akka.testkit.TestEvent
 import akka.event.Logging
 import akka.remote.RARP
 import akka.serialization.jackson.CborSerializable
 import akka.testkit.EventFilter
+import akka.testkit.ImplicitSender
+import akka.testkit.TestEvent
+import akka.testkit.TestProbe
 
 object UntrustedSpec {
   final case class IdentifyReq(path: String) extends CborSerializable

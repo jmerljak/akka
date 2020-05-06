@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.io
@@ -11,11 +11,14 @@ import java.nio.channels.SelectionKey._
 
 import scala.annotation.tailrec
 import scala.util.control.NonFatal
+
 import akka.actor.{ Actor, ActorLogging, ActorRef }
+import akka.actor.Status.Failure
 import akka.dispatch.{ RequiresMessageQueue, UnboundedMessageQueueSemantics }
-import akka.util.{ unused, ByteString }
 import akka.io.SelectionHandler._
 import akka.io.UdpConnected._
+import akka.io.dns.DnsProtocol
+import akka.util.{ unused, ByteString }
 
 /**
  * INTERNAL API
@@ -40,33 +43,41 @@ private[io] class UdpConnection(
   var channel: DatagramChannel = null
 
   if (remoteAddress.isUnresolved) {
-    Dns.resolve(remoteAddress.getHostName)(context.system, self) match {
+    Dns.resolve(DnsProtocol.Resolve(remoteAddress.getHostName), context.system, self) match {
       case Some(r) =>
-        doConnect(new InetSocketAddress(r.addr, remoteAddress.getPort))
+        reportConnectFailure {
+          doConnect(new InetSocketAddress(r.address(), remoteAddress.getPort))
+        }
       case None =>
-        context.become(resolving(), discardOld = true)
+        context.become(resolving())
     }
   } else {
-    doConnect(remoteAddress)
+    reportConnectFailure {
+      doConnect(remoteAddress)
+    }
   }
 
   def resolving(): Receive = {
-    case r: Dns.Resolved =>
+    case r: DnsProtocol.Resolved =>
       reportConnectFailure {
-        doConnect(new InetSocketAddress(r.addr, remoteAddress.getPort))
+        doConnect(new InetSocketAddress(r.address(), remoteAddress.getPort))
+      }
+    case Failure(ex) =>
+      // async-dns responds with a Failure on DNS server lookup failure
+      reportConnectFailure {
+        throw new RuntimeException(ex)
       }
   }
 
   def doConnect(@unused address: InetSocketAddress): Unit = {
-    reportConnectFailure {
-      channel = DatagramChannel.open
-      channel.configureBlocking(false)
-      val socket = channel.socket
-      options.foreach(_.beforeDatagramBind(socket))
-      localAddress.foreach(socket.bind)
-      channel.connect(remoteAddress)
-      channelRegistry.register(channel, OP_READ)
-    }
+    channel = DatagramChannel.open
+    channel.configureBlocking(false)
+    val socket = channel.socket
+    options.foreach(_.beforeDatagramBind(socket))
+    localAddress.foreach(socket.bind)
+    channel.connect(remoteAddress)
+    channelRegistry.register(channel, OP_READ)
+
     log.debug("Successfully connected to [{}]", remoteAddress)
   }
 
@@ -149,7 +160,7 @@ private[io] class UdpConnection(
   }
 
   override def postStop(): Unit =
-    if (channel.isOpen) {
+    if (channel != null && channel.isOpen) {
       log.debug("Closing DatagramChannel after being stopped")
       try channel.close()
       catch {

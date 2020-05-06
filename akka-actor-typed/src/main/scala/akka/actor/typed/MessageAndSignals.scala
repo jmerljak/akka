@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed
@@ -63,8 +63,7 @@ object Terminated {
  * once. Registration does not need to happen before the Actor terminates, a
  * notification is guaranteed to arrive after both registration and termination
  * have occurred. This message is also sent when the watched actor is on a node
- * that has been removed from the cluster when using akka-cluster or has been
- * marked unreachable when using akka-remote directly.
+ * that has been removed from the cluster when using Akka Cluster.
  *
  * @param ref Scala API: the `ActorRef` for the terminated actor
  */
@@ -108,3 +107,9 @@ final class ChildFailed(ref: ActorRef[Nothing], val cause: Throwable) extends Te
     case _                           => false
   }
 }
+
+/**
+ * Signal passed to the actor when a message adapter has thrown an exception adapting an incoming message.
+ * Default signal handlers will re-throw the exception so that such failures are handled by supervision.
+ */
+final case class MessageAdaptionFailure(exception: Throwable) extends Signal

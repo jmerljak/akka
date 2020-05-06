@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed
@@ -10,26 +10,27 @@ import scala.concurrent.Promise
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
-import akka.Done
-import akka.actor.CoordinatedShutdown
-import akka.actor.InvalidMessageException
-import akka.actor.testkit.typed.scaladsl.TestInbox
-import akka.actor.testkit.typed.scaladsl.LogCapturing
-import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.scaladsl.adapter._
-import org.scalatest._
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.ScalaFutures
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpec
+
+import akka.Done
+import akka.actor.{ Address, CoordinatedShutdown, InvalidMessageException }
+import akka.actor.testkit.typed.scaladsl.LogCapturing
+import akka.actor.testkit.typed.scaladsl.TestInbox
+import akka.actor.typed.scaladsl.Behaviors
 
 class ActorSystemSpec
-    extends WordSpec
+    extends AnyWordSpec
     with Matchers
     with BeforeAndAfterAll
     with ScalaFutures
     with Eventually
     with LogCapturing {
 
-  override implicit val patienceConfig = PatienceConfig(1.second)
+  override implicit val patienceConfig: PatienceConfig = PatienceConfig(1.second)
   def system[T](behavior: Behavior[T], name: String) = ActorSystem(behavior, name)
   def suite = "adapter"
 
@@ -64,8 +65,7 @@ class ActorSystemSpec
         }
         inbox.receiveAll() should ===("hello" :: Nil)
         sys.whenTerminated.futureValue
-        CoordinatedShutdown(sys.toClassic).shutdownReason() should ===(
-          Some(CoordinatedShutdown.ActorSystemTerminateReason))
+        CoordinatedShutdown(sys).shutdownReason() should ===(Some(CoordinatedShutdown.ActorSystemTerminateReason))
       }
     }
 
@@ -100,8 +100,7 @@ class ActorSystemSpec
       // now we know that the guardian has started, and should receive PostStop
       sys.terminate()
       sys.whenTerminated.futureValue
-      CoordinatedShutdown(sys.toClassic).shutdownReason() should ===(
-        Some(CoordinatedShutdown.ActorSystemTerminateReason))
+      CoordinatedShutdown(sys).shutdownReason() should ===(Some(CoordinatedShutdown.ActorSystemTerminateReason))
       inbox.receiveAll() should ===("done" :: Nil)
     }
 
@@ -136,7 +135,7 @@ class ActorSystemSpec
 
     "have a working thread factory" in {
       withSystem("thread", Behaviors.empty[String]) { sys =>
-        val p = Promise[Int]
+        val p = Promise[Int]()
         sys.threadFactory
           .newThread(new Runnable {
             def run(): Unit = p.success(42)
@@ -158,6 +157,12 @@ class ActorSystemSpec
         intercept[InvalidMessageException] {
           sys ! null
         }
+      }
+    }
+
+    "return default address " in {
+      withSystem("address", Behaviors.empty[String]) { sys =>
+        sys.address shouldBe Address("akka", "adapter-address")
       }
     }
   }

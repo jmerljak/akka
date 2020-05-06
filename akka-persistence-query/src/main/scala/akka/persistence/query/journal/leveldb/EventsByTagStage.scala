@@ -1,8 +1,10 @@
 /*
- * Copyright (C) 2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2019-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.persistence.query.journal.leveldb
+
+import scala.concurrent.duration.FiniteDuration
 
 import akka.NotUsed
 import akka.actor.ActorRef
@@ -14,19 +16,17 @@ import akka.persistence.journal.leveldb.LeveldbJournal
 import akka.persistence.journal.leveldb.LeveldbJournal.ReplayTaggedMessages
 import akka.persistence.journal.leveldb.LeveldbJournal.ReplayedTaggedMessage
 import akka.persistence.journal.leveldb.LeveldbJournal.TaggedEventAppended
-import akka.persistence.query.journal.leveldb.EventsByTagStage.Continue
 import akka.persistence.query.EventEnvelope
 import akka.persistence.query.Sequence
+import akka.persistence.query.journal.leveldb.EventsByTagStage.Continue
+import akka.stream.Attributes
 import akka.stream.Materializer
+import akka.stream.Outlet
+import akka.stream.SourceShape
 import akka.stream.stage.GraphStage
 import akka.stream.stage.GraphStageLogic
 import akka.stream.stage.OutHandler
 import akka.stream.stage.TimerGraphStageLogicWithLogging
-import akka.stream.Attributes
-import akka.stream.Outlet
-import akka.stream.SourceShape
-
-import scala.concurrent.duration.FiniteDuration
 
 /**
  * INTERNAL API
@@ -67,6 +67,8 @@ final private[leveldb] class EventsByTagStage(
       var replayInProgress = false
       var outstandingReplay = false
 
+      override protected def logSource: Class[_] = classOf[EventsByTagStage]
+
       override def preStart(): Unit = {
         stageActorRef = getStageActor(journalInteraction).ref
         refreshInterval.foreach(fd => {
@@ -104,7 +106,8 @@ final private[leveldb] class EventsByTagStage(
                 offset = Sequence(offset),
                 persistenceId = p.persistenceId,
                 sequenceNr = p.sequenceNr,
-                event = p.payload))
+                event = p.payload,
+                timestamp = p.timestamp))
             currOffset = offset
             deliverBuf(out)
 

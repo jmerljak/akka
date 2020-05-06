@@ -1,13 +1,23 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote.transport
 
 import java.util.concurrent.TimeoutException
 
-import akka.actor.SupervisorStrategy.Stop
+import scala.collection.immutable
+import scala.concurrent.{ Future, Promise }
+import scala.concurrent.duration._
+import scala.util.control.NonFatal
+
+import com.github.ghik.silencer.silent
+import com.typesafe.config.Config
+
+import akka.{ AkkaException, OnlyCauseStackTrace }
 import akka.actor._
+import akka.actor.SupervisorStrategy.Stop
+import akka.dispatch.{ RequiresMessageQueue, UnboundedMessageQueueSemantics }
 import akka.pattern.pipe
 import akka.remote._
 import akka.remote.transport.ActorTransportAdapter._
@@ -18,16 +28,6 @@ import akka.remote.transport.ProtocolStateActor._
 import akka.remote.transport.Transport._
 import akka.util.ByteString
 import akka.util.Helpers.Requiring
-import akka.{ AkkaException, OnlyCauseStackTrace }
-import com.typesafe.config.Config
-
-import scala.collection.immutable
-import scala.concurrent.duration._
-import scala.concurrent.{ Future, Promise }
-import scala.util.control.NonFatal
-import akka.dispatch.{ RequiresMessageQueue, UnboundedMessageQueueSemantics }
-import akka.event.{ LogMarker, Logging }
-import com.github.ghik.silencer.silent
 
 @SerialVersionUID(1L)
 class AkkaProtocolException(msg: String, cause: Throwable) extends AkkaException(msg, cause) with OnlyCauseStackTrace {
@@ -36,8 +36,9 @@ class AkkaProtocolException(msg: String, cause: Throwable) extends AkkaException
 
 private[remote] class AkkaProtocolSettings(config: Config) {
 
-  import akka.util.Helpers.ConfigOps
   import config._
+
+  import akka.util.Helpers.ConfigOps
 
   val TransportFailureDetectorConfig: Config = getConfig("akka.remote.classic.transport-failure-detector")
   val TransportFailureDetectorImplementationClass: String =
@@ -45,10 +46,6 @@ private[remote] class AkkaProtocolSettings(config: Config) {
   val TransportHeartBeatInterval: FiniteDuration = {
     TransportFailureDetectorConfig.getMillisDuration("heartbeat-interval")
   }.requiring(_ > Duration.Zero, "transport-failure-detector.heartbeat-interval must be > 0")
-
-  val RequireCookie: Boolean = getBoolean("akka.remote.classic.require-cookie")
-
-  val SecureCookie: Option[String] = if (RequireCookie) Some(getString("akka.remote.classic.secure-cookie")) else None
 
   val HandshakeTimeout: FiniteDuration = {
     val enabledTransports = config.getStringList("akka.remote.classic.enabled-transports")
@@ -76,6 +73,12 @@ private[remote] object AkkaProtocolTransport { //Couldn't these go into the Remo
       extends NoSerializationVerificationNeeded
 }
 
+object HandshakeInfo {
+  def apply(origin: Address, uid: Int): HandshakeInfo =
+    new HandshakeInfo(origin, uid, cookie = None)
+}
+
+// cookie is not used, but keeping field to avoid bin compat (Classic Remoting is deprecated anyway)
 final case class HandshakeInfo(origin: Address, uid: Int, cookie: Option[String])
 
 /**
@@ -83,7 +86,6 @@ final case class HandshakeInfo(origin: Address, uid: Int, cookie: Option[String]
  *
  * Features provided by this transport are:
  *  - Soft-state associations via the use of heartbeats and failure detectors
- *  - Secure-cookie handling
  *  - Transparent origin address handling
  *  - pluggable codecs to encode and decode Akka PDUs
  *
@@ -160,7 +162,7 @@ private[transport] class AkkaProtocolManager(
       context.actorOf(
         RARP(context.system).configureDispatcher(
           ProtocolStateActor.inboundProps(
-            HandshakeInfo(stateActorLocalAddress, addressUid, stateActorSettings.SecureCookie),
+            HandshakeInfo(stateActorLocalAddress, addressUid),
             handle,
             stateActorAssociationHandler,
             stateActorSettings,
@@ -192,7 +194,7 @@ private[transport] class AkkaProtocolManager(
     context.actorOf(
       RARP(context.system).configureDispatcher(
         ProtocolStateActor.outboundProps(
-          HandshakeInfo(stateActorLocalAddress, addressUid, stateActorSettings.SecureCookie),
+          HandshakeInfo(stateActorLocalAddress, addressUid),
           remoteAddress,
           statusPromise,
           stateActorWrappedTransport,
@@ -341,8 +343,6 @@ private[remote] class ProtocolStateActor(
     with FSM[AssociationState, ProtocolStateData]
     with RequiresMessageQueue[UnboundedMessageQueueSemantics] {
 
-  private val markerLog = Logging.withMarker(this)
-
   import ProtocolStateActor._
   import context.dispatcher
 
@@ -480,30 +480,15 @@ private[remote] class ProtocolStateActor(
 
         // Incoming association -- implicitly ACK by a heartbeat
         case Associate(info) =>
-          if (!settings.RequireCookie || info.cookie == settings.SecureCookie) {
-            sendAssociate(wrappedHandle, localHandshakeInfo)
-            failureDetector.heartbeat()
-            initHeartbeatTimer()
-            cancelTimer(handshakeTimerKey)
-            goto(Open).using(
-              AssociatedWaitHandler(
-                notifyInboundHandler(wrappedHandle, info, associationHandler),
-                wrappedHandle,
-                immutable.Queue.empty))
-          } else {
-            if (log.isDebugEnabled)
-              log.warning(
-                s"Association attempt with mismatching cookie from [{}]. Expected [{}] but received [{}].",
-                info.origin,
-                localHandshakeInfo.cookie.getOrElse(""),
-                info.cookie.getOrElse(""))
-            else
-              markerLog.warning(
-                LogMarker.Security,
-                s"Association attempt with mismatching cookie from [{}].",
-                info.origin)
-            stop()
-          }
+          sendAssociate(wrappedHandle, localHandshakeInfo)
+          failureDetector.heartbeat()
+          initHeartbeatTimer()
+          cancelTimer(handshakeTimerKey)
+          goto(Open).using(
+            AssociatedWaitHandler(
+              notifyInboundHandler(wrappedHandle, info, associationHandler),
+              wrappedHandle,
+              immutable.Queue.empty))
 
         // Got a stray message -- explicitly reset the association (force remote endpoint to reassociate)
         case msg =>

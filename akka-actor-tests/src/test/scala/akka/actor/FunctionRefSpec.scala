@@ -1,13 +1,13 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor
 
-import akka.testkit.AkkaSpec
-import akka.testkit.ImplicitSender
-import akka.testkit.EventFilter
 import akka.actor.dungeon.SerializationCheckFailedException
+import akka.testkit.AkkaSpec
+import akka.testkit.EventFilter
+import akka.testkit.ImplicitSender
 
 object FunctionRefSpec {
 
@@ -28,7 +28,7 @@ object FunctionRefSpec {
   }
 
   class SupSuper extends Actor {
-    val s = context.actorOf(Props[Super], "super")
+    val s = context.actorOf(Props[Super](), "super")
     def receive = {
       case msg => s ! msg
     }
@@ -41,6 +41,7 @@ class FunctionRefSpec extends AkkaSpec("""
   akka.actor.allow-java-serialization = on
   akka.actor.warn-about-java-serializer-usage = off
   akka.actor.serialize-messages = on
+  akka.actor.no-serialization-verification-needed-class-prefix = []
   """) with ImplicitSender {
   import FunctionRefSpec._
 
@@ -85,12 +86,12 @@ class FunctionRefSpec extends AkkaSpec("""
   "A FunctionRef" when {
 
     "created by a toplevel actor" must {
-      val s = system.actorOf(Props[Super], "super")
+      val s = system.actorOf(Props[Super](), "super")
       commonTests(s)
     }
 
     "created by a non-toplevel actor" must {
-      val s = system.actorOf(Props[SupSuper], "supsuper")
+      val s = system.actorOf(Props[SupSuper](), "supsuper")
       commonTests(s)
     }
 

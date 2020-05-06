@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed
@@ -8,20 +8,19 @@ package adapter
 
 import java.lang.reflect.InvocationTargetException
 
-import akka.actor.{ ActorInitializationException, ActorRefWithCell }
+import scala.annotation.switch
+import scala.annotation.tailrec
+import scala.util.control.Exception.Catcher
+import scala.util.control.NonFatal
+
 import akka.{ actor => classic }
+import akka.actor.ActorInitializationException
+import akka.actor.ActorRefWithCell
 import akka.actor.typed.internal.BehaviorImpl.DeferredBehavior
 import akka.actor.typed.internal.BehaviorImpl.StoppedBehavior
+import akka.actor.typed.internal.TimerSchedulerImpl.TimerMsg
 import akka.actor.typed.internal.adapter.ActorAdapter.TypedActorFailedException
 import akka.annotation.InternalApi
-import scala.annotation.tailrec
-import scala.util.Failure
-import scala.util.Success
-import scala.util.Try
-import scala.util.control.Exception.Catcher
-import scala.annotation.switch
-
-import akka.actor.typed.internal.TimerSchedulerImpl.TimerMsg
 import akka.util.OptionVal
 
 /**
@@ -43,14 +42,18 @@ import akka.util.OptionVal
     case _ => throw new RuntimeException("receive should never be called on the typed ActorAdapter")
   }
 
+  private val classicSupervisorDecider: Throwable => classic.SupervisorStrategy.Directive = { exc =>
+    // ActorInitializationException => Stop in defaultDecider
+    classic.SupervisorStrategy.defaultDecider.applyOrElse(exc, (_: Throwable) => classic.SupervisorStrategy.Restart)
+  }
+
 }
 
 /**
  * INTERNAL API
  */
 @InternalApi private[typed] final class ActorAdapter[T](_initialBehavior: Behavior[T], rethrowTypedFailure: Boolean)
-    extends classic.Actor
-    with classic.ActorLogging {
+    extends classic.Actor {
 
   private var behavior: Behavior[T] = _initialBehavior
   def currentBehavior: Behavior[T] = behavior
@@ -177,12 +180,16 @@ import akka.util.OptionVal
   }
 
   private def withSafelyAdapted[U, V](adapt: () => U)(body: U => V): Unit = {
-    Try(adapt()) match {
-      case Success(a) =>
-        body(a)
-      case Failure(ex) =>
-        log.error(ex, s"Exception thrown out of adapter. Stopping myself. ${ex.getMessage}")
-        context.stop(self)
+    try {
+      val a = adapt()
+      if (a != null) body(a)
+      else
+        ctx.log.warn(
+          "Adapter function returned null which is not valid as an actor message, ignoring. This can happen for example when using pipeToSelf and returning null from the adapt function. Null value is ignored and not passed on to actor.")
+    } catch {
+      case NonFatal(ex) =>
+        // pass it on through the signal handler chain giving supervision a chance to deal with it
+        handleSignal(MessageAdaptionFailure(ex))
     }
   }
 
@@ -220,11 +227,11 @@ import akka.util.OptionVal
         case e => e.getMessage
       }
       // log at Error as that is what the supervision strategy would have done.
-      log.error(ex, logMessage)
+      ctx.log.error(logMessage, ex)
       if (isTypedActor)
         classic.SupervisorStrategy.Stop
       else
-        classic.SupervisorStrategy.Restart
+        ActorAdapter.classicSupervisorDecider(ex)
   }
 
   private def recordChildFailure(ex: Throwable): Unit = {

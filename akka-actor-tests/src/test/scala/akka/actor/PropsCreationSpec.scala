@@ -1,12 +1,13 @@
 /*
- * Copyright (C) 2014-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2014-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor
 
+import com.github.ghik.silencer.silent
+
 import akka.testkit.AkkaSpec
 import akka.util.unused
-import com.github.ghik.silencer.silent
 
 object PropsCreationSpec {
 
@@ -31,6 +32,7 @@ object PropsCreationSpec {
 class PropsCreationSpec extends AkkaSpec("""
   # test is using Java serialization and relies on serialize-creators=on
   akka.actor.serialize-creators = on
+  akka.actor.no-serialization-verification-needed-class-prefix = []
   akka.actor.allow-java-serialization = on
   akka.actor.warn-about-java-serializer-usage = off
   """) {

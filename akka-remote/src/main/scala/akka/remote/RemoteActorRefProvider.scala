@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote
@@ -9,12 +9,14 @@ import scala.util.Failure
 import scala.util.control.Exception.Catcher
 import scala.util.control.NonFatal
 
+import com.github.ghik.silencer.silent
+
 import akka.ConfigurationException
 import akka.Done
+import akka.actor._
 import akka.actor.SystemGuardian.RegisterTerminationHook
 import akka.actor.SystemGuardian.TerminationHook
 import akka.actor.SystemGuardian.TerminationHookDone
-import akka.actor._
 import akka.annotation.InternalApi
 import akka.dispatch.RequiresMessageQueue
 import akka.dispatch.UnboundedMessageQueueSemantics
@@ -36,7 +38,6 @@ import akka.serialization.Serialization
 import akka.util.ErrorMessages
 import akka.util.OptionVal
 import akka.util.unused
-import com.github.ghik.silencer.silent
 
 /**
  * INTERNAL API
@@ -187,6 +188,7 @@ private[akka] class RemoteActorRefProvider(
 
   override def rootPath: ActorPath = local.rootPath
   override def deadLetters: InternalActorRef = local.deadLetters
+  override def ignoreRef: ActorRef = local.ignoreRef
 
   // these are only available after init()
   override def rootGuardian: InternalActorRef = local.rootGuardian
@@ -246,7 +248,6 @@ private[akka] class RemoteActorRefProvider(
         case ArterySettings.Tcp      => new ArteryTcpTransport(system, this, tlsEnabled = false)
         case ArterySettings.TlsTcp   => new ArteryTcpTransport(system, this, tlsEnabled = true)
       } else new Remoting(system, this))
-
     _internals = internals
     remotingTerminator ! internals
 
@@ -258,6 +259,7 @@ private[akka] class RemoteActorRefProvider(
     // this enables reception of remote requests
     transport.start()
 
+    _addressString = OptionVal.Some(_internals.transport.defaultAddress.toString)
     _remoteWatcher = createOrNone[ActorRef](createRemoteWatcher(system))
     remoteDeploymentWatcher = createOrNone[ActorRef](createRemoteDeploymentWatcher(system))
   }
@@ -370,9 +372,6 @@ private[akka] class RemoteActorRefProvider(
       async: Boolean): InternalActorRef =
     if (systemService) local.actorOf(system, props, supervisor, path, systemService, deploy, lookupDeploy, async)
     else {
-
-      if (!system.dispatchers.hasDispatcher(props.dispatcher))
-        throw new ConfigurationException(s"Dispatcher [${props.dispatcher}] not configured for path $path")
 
       /*
        * This needs to deal with “mangled” paths, which are created by remote
@@ -524,6 +523,9 @@ private[akka] class RemoteActorRefProvider(
    * public `resolveActorRef(path: String)`.
    */
   private[akka] def internalResolveActorRef(path: String): ActorRef = path match {
+
+    case p if IgnoreActorRef.isIgnoreRefPath(p) => this.ignoreRef
+
     case ActorPathExtractor(address, elems) =>
       if (hasAddress(address)) local.resolveActorRef(rootGuardian, elems)
       else {
@@ -542,6 +544,7 @@ private[akka] class RemoteActorRefProvider(
             new EmptyLocalActorRef(this, rootPath, eventStream)
         }
       }
+
     case _ =>
       log.debug("Resolve (deserialization) of unknown (invalid) path [{}], using deadLetters.", path)
       deadLetters
@@ -623,6 +626,17 @@ private[akka] class RemoteActorRefProvider(
   def quarantine(address: Address, uid: Option[Long], reason: String): Unit =
     transport.quarantine(address, uid, reason)
 
+  // lazily initialized with fallback since it can depend on transport which is not initialized up front
+  // worth caching since if it is used once in a system it will very likely be used many times
+  @volatile private var _addressString: OptionVal[String] = OptionVal.None
+  override private[akka] def addressString: String = {
+    _addressString match {
+      case OptionVal.Some(addr) => addr
+      case OptionVal.None       =>
+        // not initialized yet, fallback
+        local.addressString
+    }
+  }
 }
 
 private[akka] trait RemoteRef extends ActorRefScope {

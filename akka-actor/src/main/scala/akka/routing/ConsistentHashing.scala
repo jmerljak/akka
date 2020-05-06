@@ -1,22 +1,26 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.routing
 
+import java.util.concurrent.atomic.AtomicReference
+
 import scala.collection.immutable
-import akka.dispatch.Dispatchers
+import scala.util.control.NonFatal
+
 import com.typesafe.config.Config
-import akka.actor.SupervisorStrategy
-import akka.japi.Util.immutableSeq
+
+import akka.actor.ActorPath
+import akka.actor.ActorSystem
 import akka.actor.Address
 import akka.actor.ExtendedActorSystem
-import akka.actor.ActorSystem
-import java.util.concurrent.atomic.AtomicReference
-import akka.serialization.SerializationExtension
-import scala.util.control.NonFatal
+import akka.actor.SupervisorStrategy
+import akka.actor.WrappedMessage
+import akka.dispatch.Dispatchers
 import akka.event.Logging
-import akka.actor.ActorPath
+import akka.japi.Util.immutableSeq
+import akka.serialization.SerializationExtension
 
 object ConsistentHashingRouter {
 
@@ -51,7 +55,8 @@ object ConsistentHashingRouter {
   @SerialVersionUID(1L)
   final case class ConsistentHashableEnvelope(message: Any, hashKey: Any)
       extends ConsistentHashable
-      with RouterEnvelope {
+      with RouterEnvelope
+      with WrappedMessage {
     override def consistentHashKey: Any = hashKey
   }
 

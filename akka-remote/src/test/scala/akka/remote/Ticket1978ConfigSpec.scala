@@ -1,11 +1,11 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote
 
-import akka.testkit._
 import akka.remote.transport.netty.SSLSettings
+import akka.testkit._
 
 class Ticket1978ConfigSpec extends AkkaSpec("""
     akka.remote.classic.netty.ssl.security {

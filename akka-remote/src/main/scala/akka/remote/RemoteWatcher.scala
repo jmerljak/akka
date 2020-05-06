@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote
@@ -7,16 +7,17 @@ package akka.remote
 import scala.collection.mutable
 import scala.concurrent.duration._
 
+import com.github.ghik.silencer.silent
+
 import akka.actor._
 import akka.annotation.InternalApi
-import akka.dispatch.sysmsg.{ DeathWatchNotification, Watch }
 import akka.dispatch.{ RequiresMessageQueue, UnboundedMessageQueueSemantics }
+import akka.dispatch.Dispatchers
+import akka.dispatch.sysmsg.{ DeathWatchNotification, Watch }
 import akka.event.AddressTerminatedTopic
 import akka.remote.artery.ArteryMessage
-import akka.dispatch.Dispatchers
 import akka.remote.artery.ArteryTransport
 import akka.util.unused
-import com.github.ghik.silencer.silent
 
 /**
  * INTERNAL API
@@ -118,12 +119,12 @@ private[akka] class RemoteWatcher(
   // actors that this node is watching, map of watchee -> Set(watchers)
   @silent("deprecated")
   val watching = new mutable.HashMap[InternalActorRef, mutable.Set[InternalActorRef]]()
-  with mutable.MultiMap[InternalActorRef, InternalActorRef]
+    with mutable.MultiMap[InternalActorRef, InternalActorRef]
 
   // nodes that this node is watching, i.e. expecting heartbeats from these nodes. Map of address -> Set(watchee) on this address
   @silent("deprecated")
   val watcheeByNodes = new mutable.HashMap[Address, mutable.Set[InternalActorRef]]()
-  with mutable.MultiMap[Address, InternalActorRef]
+    with mutable.MultiMap[Address, InternalActorRef]
   def watchingNodes = watcheeByNodes.keySet
 
   var unreachable: Set[Address] = Set.empty

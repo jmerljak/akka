@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.dungeon
@@ -7,12 +7,14 @@ package akka.actor.dungeon
 import java.util.Optional
 
 import scala.annotation.tailrec
-import scala.util.control.NonFatal
 import scala.collection.immutable
+import scala.util.control.NonFatal
+
+import com.github.ghik.silencer.silent
+
 import akka.actor._
 import akka.serialization.{ Serialization, SerializationExtension, Serializers }
 import akka.util.{ Helpers, Unsafe }
-import com.github.ghik.silencer.silent
 
 private[akka] object Children {
   val GetNobody = () => Nobody
@@ -256,7 +258,8 @@ private[akka] trait Children { this: ActorCell =>
       name: String,
       async: Boolean,
       systemService: Boolean): ActorRef = {
-    if (cell.system.settings.SerializeAllCreators && !systemService && props.deploy.scope != LocalScope) {
+    val settings = cell.system.settings
+    if (settings.SerializeAllCreators && !systemService && props.deploy.scope != LocalScope) {
       val oldInfo = Serialization.currentTransportInformation.value
       try {
         val ser = SerializationExtension(cell.system)
@@ -266,7 +269,8 @@ private[akka] trait Children { this: ActorCell =>
         props.args.forall(
           arg =>
             arg == null ||
-            arg.isInstanceOf[NoSerializationVerificationNeeded] || {
+            arg.isInstanceOf[NoSerializationVerificationNeeded] ||
+            settings.NoSerializationVerificationNeededClassPrefix.exists(arg.getClass.getName.startsWith) || {
               val o = arg.asInstanceOf[AnyRef]
               val serializer = ser.findSerializerFor(o)
               val bytes = serializer.toBinary(o)

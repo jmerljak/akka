@@ -1,25 +1,28 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.io.dns.internal
 
 import java.net.{ Inet4Address, Inet6Address, InetAddress, InetSocketAddress }
 
-import akka.actor.{ Actor, ActorLogging, ActorRef, ActorRefFactory }
-import akka.annotation.InternalApi
-import akka.io.dns.CachePolicy.Ttl
-import akka.io.dns.DnsProtocol.{ Ip, RequestType, Srv }
-import akka.io.dns.internal.DnsClient._
-import akka.io.dns._
-import akka.pattern.{ ask, pipe }
-import akka.util.{ Helpers, Timeout }
-
 import scala.collection.immutable
+import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.Future
-import scala.concurrent.duration.Duration
 import scala.util.Try
 import scala.util.control.NonFatal
+
+import akka.actor.{ Actor, ActorLogging, ActorRef, ActorRefFactory }
+import akka.annotation.InternalApi
+import akka.io.SimpleDnsCache
+import akka.io.dns._
+import akka.io.dns.CachePolicy.{ Never, Ttl }
+import akka.io.dns.DnsProtocol.{ Ip, RequestType, Srv }
+import akka.io.dns.internal.DnsClient._
+import akka.pattern.{ ask, pipe }
+import akka.pattern.AskTimeoutException
+import akka.util.{ Helpers, Timeout }
+import akka.util.PrettyDuration._
 
 /**
  * INTERNAL API
@@ -27,20 +30,22 @@ import scala.util.control.NonFatal
 @InternalApi
 private[io] final class AsyncDnsResolver(
     settings: DnsSettings,
-    cache: AsyncDnsCache,
+    cache: SimpleDnsCache,
     clientFactory: (ActorRefFactory, List[InetSocketAddress]) => List[ActorRef])
     extends Actor
     with ActorLogging {
 
   import AsyncDnsResolver._
 
-  implicit val ec = context.dispatcher
+  implicit val ec: ExecutionContextExecutor = context.dispatcher
 
   // For ask to DNS Client
-  implicit val timeout = Timeout(settings.ResolveTimeout)
+  implicit val timeout: Timeout = Timeout(settings.ResolveTimeout)
 
   val nameServers = settings.NameServers
 
+  val positiveCachePolicy = settings.PositiveCachePolicy
+  val negativeCachePolicy = settings.NegativeCachePolicy
   log.debug(
     "Using name servers [{}] and search domains [{}] with ndots={}",
     nameServers,
@@ -48,6 +53,7 @@ private[io] final class AsyncDnsResolver(
     settings.NDots)
 
   private var requestId: Short = 0
+
   private def nextId(): Short = {
     requestId = (requestId + 1).toShort
     requestId
@@ -55,6 +61,8 @@ private[io] final class AsyncDnsResolver(
 
   private val resolvers: List[ActorRef] = clientFactory(context, nameServers)
 
+  // only supports DnsProtocol, not the deprecated Dns protocol
+  // AsyncDnsManager converts between the protocols to support the deprecated protocol
   override def receive: Receive = {
     case DnsProtocol.Resolve(name, mode) =>
       cache.get((name, mode)) match {
@@ -65,9 +73,10 @@ private[io] final class AsyncDnsResolver(
           resolveWithResolvers(name, mode, resolvers)
             .map { resolved =>
               if (resolved.records.nonEmpty) {
-                val minTtl = resolved.records.minBy[Duration](_.ttl.value).ttl
+                val minTtl = (positiveCachePolicy +: resolved.records.map(_.ttl)).min
                 cache.put((name, mode), resolved, minTtl)
-              }
+              } else if (negativeCachePolicy != Never) cache.put((name, mode), resolved, negativeCachePolicy)
+              log.debug(s"{} resolved {}", mode, resolved)
               resolved
             }
             .pipeTo(sender())
@@ -96,7 +105,12 @@ private[io] final class AsyncDnsResolver(
         case head :: tail =>
           resolveWithSearch(name, requestType, head).recoverWith {
             case NonFatal(t) =>
-              log.error(t, "Resolve failed. Trying next name server")
+              t match {
+                case _: AskTimeoutException =>
+                  log.info("Resolve of {} timed out after {}. Trying next name server", name, timeout.duration.pretty)
+                case _ =>
+                  log.info("Resolve of {} failed. Trying next name server {}", name, t.getMessage)
+              }
               resolveWithResolvers(name, requestType, tail)
           }
       }

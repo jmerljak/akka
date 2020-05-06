@@ -1,20 +1,21 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.config
 
 import java.util.concurrent.TimeUnit
 
+import scala.concurrent.duration._
+
+import com.typesafe.config.ConfigFactory
+import org.scalatest.Assertions
+
 import akka.actor.ActorSystem
+import akka.actor.ExtendedActorSystem
 import akka.event.DefaultLoggingFilter
 import akka.event.Logging.DefaultLogger
 import akka.testkit.AkkaSpec
-import com.typesafe.config.ConfigFactory
-import org.scalatest.Assertions
-import scala.concurrent.duration._
-
-import akka.actor.ExtendedActorSystem
 
 class ConfigSpec extends AkkaSpec(ConfigFactory.defaultReference(ActorSystem.findClassLoader())) with Assertions {
 
@@ -35,6 +36,8 @@ class ConfigSpec extends AkkaSpec(ConfigFactory.defaultReference(ActorSystem.fin
         getBoolean("akka.actor.serialize-messages") should ===(false)
         settings.SerializeAllMessages should ===(false)
 
+        settings.NoSerializationVerificationNeededClassPrefix should ===(Set("akka."))
+
         getInt("akka.scheduler.ticks-per-wheel") should ===(512)
         getDuration("akka.scheduler.tick-duration", TimeUnit.MILLISECONDS) should ===(10L)
         getString("akka.scheduler.implementation") should ===("akka.actor.LightArrayRevolverScheduler")
@@ -45,6 +48,9 @@ class ConfigSpec extends AkkaSpec(ConfigFactory.defaultReference(ActorSystem.fin
         getBoolean("akka.jvm-exit-on-fatal-error") should ===(true)
         settings.JvmExitOnFatalError should ===(true)
         settings.JvmShutdownHooks should ===(true)
+
+        getBoolean("akka.fail-mixed-versions") should ===(true)
+        settings.FailMixedVersions should ===(true)
 
         getInt("akka.actor.deployment.default.virtual-nodes-factor") should ===(10)
         settings.DefaultVirtualNodesFactor should ===(10)

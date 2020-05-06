@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package jdocs.akka.typed.coexistence;
@@ -18,7 +18,7 @@ import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.javadsl.Receive;
 import akka.testkit.javadsl.TestKit;
 import org.junit.Test;
-import org.scalatest.junit.JUnitSuite;
+import org.scalatestplus.junit.JUnitSuite;
 
 public class TypedWatchingClassicTest extends JUnitSuite {
 
@@ -39,11 +39,10 @@ public class TypedWatchingClassicTest extends JUnitSuite {
       INSTANCE
     }
 
-    private final akka.actor.typed.javadsl.ActorContext<Command> context;
     private final akka.actor.ActorRef second;
 
     private Typed(ActorContext<Command> context, akka.actor.ActorRef second) {
-      this.context = context;
+      super(context);
       this.second = second;
     }
 
@@ -70,7 +69,7 @@ public class TypedWatchingClassicTest extends JUnitSuite {
     }
 
     private Behavior<Command> onPong() {
-      Adapter.stop(context, second);
+      Adapter.stop(getContext(), second);
       return this;
     }
   }

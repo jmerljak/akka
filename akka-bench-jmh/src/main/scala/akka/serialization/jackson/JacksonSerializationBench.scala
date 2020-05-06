@@ -1,25 +1,26 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.serialization.jackson
 
+import java.time.{ Duration => JDuration }
 import java.time.Instant
 import java.time.LocalDateTime
-import java.time.{ Duration => JDuration }
 import java.util
 import java.util.concurrent.TimeUnit
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
+import com.github.ghik.silencer.silent
+import com.typesafe.config.ConfigFactory
+import org.openjdk.jmh.annotations._
+
 import akka.actor._
 import akka.serialization.Serialization
 import akka.serialization.SerializationExtension
 import akka.serialization.SerializerWithStringManifest
-import com.github.ghik.silencer.silent
-import com.typesafe.config.ConfigFactory
-import org.openjdk.jmh.annotations._
 
 object JacksonSerializationBench {
   trait TestMessage
@@ -201,12 +202,14 @@ class JacksonSerializationBench {
             }
           }
           serialization.jackson {
-            compress-larger-than = 100000 b
-            
             serialization-features {
               #WRITE_DATES_AS_TIMESTAMPS = off
             }
           }
+        }
+        akka.serialization.jackson.jackson-json.compression {
+          algorithm = off
+          compress-larger-than = 100 b
         }
       """)
 

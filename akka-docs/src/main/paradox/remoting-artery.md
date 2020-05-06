@@ -1,3 +1,6 @@
+---
+project.description: Details about the underlying remoting module for Akka Cluster.
+---
 # Artery Remoting
 
 @@@ note
@@ -45,6 +48,7 @@ to your `application.conf` file:
 ```
 akka {
   actor {
+    # provider=remote is possible, but prefer cluster
     provider = cluster 
   }
   remote {
@@ -59,7 +63,7 @@ akka {
 
 As you can see in the example above there are four things you need to add to get started:
 
- * Change provider from `local` to `cluster`
+ * Change provider from `local`. We recommend using @ref:[Akka Cluster](cluster-usage.md) over using remoting directly.
  * Enable Artery to use it as the remoting implementation
  * Add host name - the machine you want to run the actor system on; this host
 name is exactly what is passed to remote systems in order to identify this
@@ -112,9 +116,11 @@ acts as a "server" to which arbitrary systems on the same network can connect to
 There are three alternatives of which underlying transport to use. It is configured by property
 `akka.remote.artery.transport` with the possible values:
 
-* `aeron-udp` - Based on [Aeron (UDP)](https://github.com/real-logic/aeron)
-* `tcp` - Based on @ref:[Akka Streams TCP](stream/stream-io.md#streaming-tcp)
+* `tcp` - Based on @ref:[Akka Streams TCP](stream/stream-io.md#streaming-tcp) (default if other not configured)
 * `tls-tcp` - Same as `tcp` with encryption using @ref:[Akka Streams TLS](stream/stream-io.md#tls)
+* `aeron-udp` - Based on [Aeron (UDP)](https://github.com/real-logic/aeron)
+
+If you are uncertain of what to select a good choice is to use the default, which is `tcp`.
 
 The Aeron (UDP) transport is a high performance transport and should be used for systems
 that require high throughput and low latency. It uses more CPU than TCP when the system
@@ -125,15 +131,15 @@ when encryption is needed, but it can also be used with plain TCP without TLS. I
 the obvious choice when UDP can't be used.
 It has very good performance (high throughput and low latency) but latency at high throughput
 might not be as good as the Aeron transport. It has less operational complexity than the
-Aeron transport and less risk of trouble in container environments. Artery TCP will be
-the default transport in Akka 2.6.0.
-
-@@@ note
+Aeron transport and less risk of trouble in container environments.
 
 Aeron requires 64bit JVM to work reliably and is only officially supported on Linux, Mac and Windows.
 It may work on other Unixes e.g. Solaris but insufficient testing has taken place for it to be
-officially supported. If you're on a Big Endian processor, such as Sparc, it is recommended to use
- TCP.
+officially supported. If you're on a Big Endian processor, such as Sparc, it is recommended to use TCP.
+
+@@@ note
+
+@ref:[Rolling update](additional/rolling-updates.md) is not supported when changing from one transport to another.
 
 @@@
 
@@ -157,7 +163,7 @@ real network.
 
 In cases, where Network Address Translation (NAT) is used or other network bridging is involved, it is important
 to configure the system so that it understands that there is a difference between his externally visible, canonical
-address and between the host-port pair that is used to listen for connections. See [Akka behind NAT or in a Docker container](#remote-configuration-nat-artery)
+address and between the host-port pair that is used to listen for connections. See @ref:[Akka behind NAT or in a Docker container](#remote-configuration-nat-artery)
 for details.
 
 ## Acquiring references to remote actors
@@ -250,7 +256,7 @@ be delivered just fine.
 
 An `ActorSystem` should not be exposed via Akka Remote (Artery) over plain Aeron/UDP or TCP to an untrusted
 network (e.g. Internet). It should be protected by network security, such as a firewall. If that is not considered
-as enough protection [TLS with mutual authentication](#remote-tls) should be enabled.
+as enough protection @ref:[TLS with mutual authentication](#remote-tls) should be enabled.
 
 Best practice is that Akka remoting nodes should only be accessible from the adjacent network. Note that if TLS is
 enabled with mutual authentication there is still a risk that an attacker can gain access to a valid certificate by
@@ -327,6 +333,8 @@ valid certificate by compromising any node with certificates issued by the same 
 It's recommended that you enable hostname verification with
 `akka.remote.artery.ssl.config-ssl-engine.hostname-verification=on`.
 When enabled it will verify that the destination hostname matches the hostname in the peer's certificate.
+
+In deployments where hostnames are dynamic and not known up front it can make sense to leave the hostname verification off.
 
 You have a few choices how to set up certificates and hostname verification:
 
@@ -648,7 +656,7 @@ Note that lowest latency can be achieved with `inbound-lanes=1` and `outbound-la
 
 Also note that the total amount of parallel tasks are bound by the `remote-dispatcher` and the thread pool size should not exceed the number of CPU cores minus headroom for actually processing the messages in the application, i.e. in practice the the pool size should be less than half of the number of cores.
 
-See `inbound-lanes` and `outbound-lanes` in the @ref:[reference configuration](general/configuration.md#config-akka-remote-artery) for default values.
+See `inbound-lanes` and `outbound-lanes` in the @ref:[reference configuration](general/configuration-reference.md#config-akka-remote-artery) for default values.
 
 ### Dedicated subchannel for large messages
 
@@ -793,7 +801,7 @@ the system might have less latency than at low message rates.
 ## Remote Configuration
 
 There are lots of configuration properties that are related to remoting in Akka. We refer to the
-@ref:[reference configuration](general/configuration.md#config-akka-remote-artery) for more information.
+@ref:[reference configuration](general/configuration-reference.md#config-akka-remote-artery) for more information.
 
 @@@ note
 
@@ -859,3 +867,12 @@ spec:
 There is currently no way to limit the size of a memory empty dir but there is a [pull request](https://github.com/kubernetes/kubernetes/pull/63641) for adding it.
 
 Any space used in the mount will count towards your container's memory usage.
+
+
+### Flight Recorder
+
+When running on JDK 11 Artery specific flight recording is available through the [Java Flight Recorder (JFR)](https://openjdk.java.net/jeps/328).
+The flight recorder is automatically enabled by detecting JDK 11 but can be disabled if needed by setting `akka.java-flight-recorder.enabled = false`.
+
+Low overhead Artery specific events are emitted by default when JFR is enabled, higher overhead events needs a custom settings template and are not enabled automatically with the `profiling` JFR template.
+To enable those create a copy of the `profiling` template and enable all `Akka` sub category events, for example through the JMC GUI. 

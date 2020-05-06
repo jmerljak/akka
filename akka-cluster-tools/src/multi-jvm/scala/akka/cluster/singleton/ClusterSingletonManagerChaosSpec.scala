@@ -1,16 +1,19 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster.singleton
 
-import language.postfixOps
 import scala.concurrent.duration._
+
 import com.typesafe.config.ConfigFactory
+import language.postfixOps
+
 import akka.actor.Actor
 import akka.actor.ActorRef
-import akka.actor.Props
+import akka.actor.ActorSelection
 import akka.actor.PoisonPill
+import akka.actor.Props
 import akka.actor.RootActorPath
 import akka.cluster.Cluster
 import akka.cluster.ClusterEvent._
@@ -20,7 +23,6 @@ import akka.remote.testkit.MultiNodeSpec
 import akka.remote.testkit.STMultiNodeSpec
 import akka.testkit._
 import akka.testkit.TestEvent._
-import akka.actor.ActorSelection
 
 object ClusterSingletonManagerChaosSpec extends MultiNodeConfig {
   val controller = role("controller")
@@ -35,7 +37,8 @@ object ClusterSingletonManagerChaosSpec extends MultiNodeConfig {
     akka.loglevel = INFO
     akka.actor.provider = "cluster"
     akka.remote.log-remote-lifecycle-events = off
-    akka.cluster.auto-down-unreachable-after = 0s
+    akka.cluster.downing-provider-class = akka.cluster.testkit.AutoDowning
+    akka.cluster.testkit.auto-down-unreachable-after = 0s
     """))
 
   case object EchoStarted

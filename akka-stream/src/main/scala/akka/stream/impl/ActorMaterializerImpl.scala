@@ -1,10 +1,17 @@
 /*
- * Copyright (C) 2014-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2014-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.impl
 
 import java.util.concurrent.atomic.AtomicBoolean
+
+import scala.collection.immutable
+import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.Future
+import scala.concurrent.duration._
+
+import com.github.ghik.silencer.silent
 
 import akka.actor._
 import akka.annotation.DoNotInherit
@@ -20,13 +27,6 @@ import akka.stream.impl.fusing.GraphInterpreterShell
 import akka.stream.snapshot.StreamSnapshot
 import akka.util.OptionVal
 import akka.util.Timeout
-import com.github.ghik.silencer.silent
-
-import scala.collection.immutable
-import scala.concurrent.duration._
-import scala.concurrent.Await
-import scala.concurrent.ExecutionContextExecutor
-import scala.concurrent.Future
 
 /**
  * ExtendedActorMaterializer used by subtypes which delegates in-island wiring to [[akka.stream.impl.PhaseIsland]]s
@@ -57,11 +57,8 @@ import scala.concurrent.Future
   @InternalApi private[akka] override def actorOf(context: MaterializationContext, props: Props): ActorRef = {
     val effectiveProps = props.dispatcher match {
       case Dispatchers.DefaultDispatcherId =>
+        // the caller said to use the default dispatcher, but that can been trumped by the dispatcher attribute
         props.withDispatcher(context.effectiveAttributes.mandatoryAttribute[ActorAttributes.Dispatcher].dispatcher)
-      case ActorAttributes.IODispatcher.dispatcher =>
-        // this one is actually not a dispatcher but a relative config key pointing containing the actual dispatcher name
-        val actual = context.effectiveAttributes.mandatoryAttribute[ActorAttributes.BlockingIoDispatcher].dispatcher
-        props.withDispatcher(actual)
       case _ => props
     }
 
@@ -75,14 +72,6 @@ import scala.concurrent.Future
     supervisor match {
       case ref: LocalActorRef =>
         ref.underlying.attachChild(props, name, systemService = false)
-      case ref: RepointableActorRef =>
-        if (ref.isStarted)
-          ref.underlying.asInstanceOf[ActorCell].attachChild(props, name, systemService = false)
-        else {
-          implicit val timeout = ref.system.settings.CreationTimeout
-          val f = (supervisor ? StreamSupervisor.Materialize(props, name)).mapTo[ActorRef]
-          Await.result(f, timeout.duration)
-        }
       case unknown =>
         throw new IllegalStateException(s"Stream supervisor must be a local actor, was [${unknown.getClass.getName}]")
     }
@@ -186,6 +175,7 @@ private[akka] class SubFusingActorMaterializerImpl(
  */
 @InternalApi private[akka] object FlowNames extends ExtensionId[FlowNames] with ExtensionIdProvider {
   override def get(system: ActorSystem): FlowNames = super.get(system)
+  override def get(system: ClassicActorSystemProvider): FlowNames = super.get(system)
   override def lookup() = FlowNames
   override def createExtension(system: ExtendedActorSystem): FlowNames = new FlowNames
 }
@@ -213,14 +203,6 @@ private[akka] class SubFusingActorMaterializerImpl(
       extends DeadLetterSuppression
       with NoSerializationVerificationNeeded
 
-  final case class AddFunctionRef(f: (ActorRef, Any) => Unit, name: String)
-      extends DeadLetterSuppression
-      with NoSerializationVerificationNeeded
-
-  final case class RemoveFunctionRef(ref: FunctionRef)
-      extends DeadLetterSuppression
-      with NoSerializationVerificationNeeded
-
   case object GetChildrenSnapshots
   final case class ChildrenSnapshots(seq: immutable.Seq[StreamSnapshot])
       extends DeadLetterSuppression
@@ -244,18 +226,13 @@ private[akka] class SubFusingActorMaterializerImpl(
  */
 @InternalApi private[akka] class StreamSupervisor(haveShutDown: AtomicBoolean) extends Actor {
   import akka.stream.impl.StreamSupervisor._
-  implicit val ec = context.dispatcher
+  implicit val ec: ExecutionContextExecutor = context.dispatcher
   override def supervisorStrategy: SupervisorStrategy = SupervisorStrategy.stoppingStrategy
 
-  def receive = {
+  def receive: Receive = {
     case Materialize(props, name) =>
       val impl = context.actorOf(props, name)
       sender() ! impl
-    case AddFunctionRef(f, name) =>
-      val ref = context.asInstanceOf[ActorCell].addFunctionRef(f, name)
-      sender() ! ref
-    case RemoveFunctionRef(ref) =>
-      context.asInstanceOf[ActorCell].removeFunctionRef(ref)
     case GetChildren =>
       sender() ! Children(context.children.toSet)
     case GetChildrenSnapshots =>
@@ -267,7 +244,6 @@ private[akka] class SubFusingActorMaterializerImpl(
   }
 
   def takeSnapshotsOfChildren(): Future[immutable.Seq[StreamSnapshot]] = {
-    implicit val scheduler = context.system.scheduler
     // Arbitrary timeout but should always be quick, the failure scenario is that
     // the child/stream stopped, and we do retry below
     implicit val timeout: Timeout = 1.second
@@ -279,7 +255,7 @@ private[akka] class SubFusingActorMaterializerImpl(
 
     // If the timeout hits it is likely because one of the streams stopped between looking at the list
     // of children and asking it for a snapshot. We retry the entire snapshot in that case
-    retry(() => takeSnapshot(), 3, Duration.Zero)
+    retry(() => takeSnapshot(), 3)
   }
 
   override def postStop(): Unit = haveShutDown.set(true)

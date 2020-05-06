@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.discovery
@@ -7,10 +7,10 @@ package akka.discovery
 import java.util.concurrent.ConcurrentHashMap
 import java.util.function.{ Function => JFunction }
 
+import scala.util.{ Failure, Success, Try }
+
 import akka.actor._
 import akka.annotation.InternalApi
-
-import scala.util.{ Failure, Success, Try }
 
 final class Discovery(implicit system: ExtendedActorSystem) extends Extension {
 
@@ -63,7 +63,7 @@ final class Discovery(implicit system: ExtendedActorSystem) extends Extension {
       if (config.hasPath(path)) config.getString(path)
       else
         throw new IllegalArgumentException(
-          s"$path must contain field `class` that is a FQN of a `akka.discovery.ServiceDiscovery` implementation")
+          s"$path must point to a FQN of a `akka.discovery.ServiceDiscovery` implementation")
 
     def create(clazzName: String): Try[ServiceDiscovery] = {
       dynamic
@@ -102,6 +102,8 @@ object Discovery extends ExtensionId[Discovery] with ExtensionIdProvider {
   override def lookup: Discovery.type = Discovery
 
   override def get(system: ActorSystem): Discovery = super.get(system)
+
+  override def get(system: ClassicActorSystemProvider): Discovery = super.get(system)
 
   override def createExtension(system: ExtendedActorSystem): Discovery = new Discovery()(system)
 

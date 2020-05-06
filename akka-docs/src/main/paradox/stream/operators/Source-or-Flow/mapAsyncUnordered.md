@@ -4,13 +4,11 @@ Like `mapAsync` but @scala[`Future`] @java[`CompletionStage`] results are passed
 
 @ref[Asynchronous operators](../index.md#asynchronous-operators)
 
-@@@div { .group-scala }
-
 ## Signature
 
-@@signature [Flow.scala](/akka-stream/src/main/scala/akka/stream/scaladsl/Flow.scala) { #mapAsyncUnordered }
+@apidoc[Source.mapAsyncUnordered](Source) { scala="#mapAsyncUnordered[T](parallelism:Int)(f:Out=&gt;scala.concurrent.Future[T]):FlowOps.this.Repr[T]" java="#mapAsyncUnordered(int,akka.japi.function.Function)" }
+@apidoc[Flow.mapAsyncUnordered](Flow) { scala="#mapAsyncUnordered[T](parallelism:Int)(f:Out=&gt;scala.concurrent.Future[T]):FlowOps.this.Repr[T]" java="#mapAsyncUnordered(int,akka.japi.function.Function)" }
 
-@@@
 
 ## Description
 
@@ -20,6 +18,7 @@ that triggered them.
 If a @scala[`Future`] @java[`CompletionStage`] completes with `null`, element is not passed downstream.
 If a @scala[`Future`] @java[`CompletionStage`] fails, the stream also fails (unless a different supervision strategy is applied)
 
+## Reactive Streams semantics
 
 @@@div { .callout }
 

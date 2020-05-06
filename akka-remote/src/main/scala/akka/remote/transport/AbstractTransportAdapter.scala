@@ -1,21 +1,22 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote.transport
 
-import akka.actor._
-import akka.pattern.{ ask, gracefulStop, pipe }
-import akka.remote.Remoting.RegisterTransportActor
-import akka.remote.transport.Transport._
-import akka.remote.RARP
-import akka.util.Timeout
 import scala.collection.immutable
-import scala.concurrent.duration._
 import scala.concurrent.{ ExecutionContext, Future, Promise }
-import akka.dispatch.{ RequiresMessageQueue, UnboundedMessageQueueSemantics }
-import akka.remote.transport.AssociationHandle.DisassociateInfo
+import scala.concurrent.duration._
+
+import akka.actor._
 import akka.actor.DeadLetterSuppression
+import akka.dispatch.{ RequiresMessageQueue, UnboundedMessageQueueSemantics }
+import akka.pattern.{ ask, gracefulStop, pipe }
+import akka.remote.RARP
+import akka.remote.Remoting.RegisterTransportActor
+import akka.remote.transport.AssociationHandle.DisassociateInfo
+import akka.remote.transport.Transport._
+import akka.util.Timeout
 
 @deprecated("Classic remoting is deprecated, use Artery", "2.6.0")
 trait TransportAdapterProvider {
@@ -49,6 +50,7 @@ class TransportAdapters(system: ExtendedActorSystem) extends Extension {
 @deprecated("Classic remoting is deprecated, use Artery", "2.6.0")
 object TransportAdaptersExtension extends ExtensionId[TransportAdapters] with ExtensionIdProvider {
   override def get(system: ActorSystem): TransportAdapters = super.get(system)
+  override def get(system: ClassicActorSystemProvider): TransportAdapters = super.get(system)
   override def lookup = TransportAdaptersExtension
   override def createExtension(system: ExtendedActorSystem): TransportAdapters =
     new TransportAdapters(system)
@@ -159,7 +161,7 @@ object ActorTransportAdapter {
       extends TransportOperation
       with DeadLetterSuppression
 
-  implicit val AskTimeout = Timeout(5.seconds)
+  implicit val AskTimeout: Timeout = Timeout(5.seconds)
 }
 
 @deprecated("Classic remoting is deprecated, use Artery", "2.6.0")

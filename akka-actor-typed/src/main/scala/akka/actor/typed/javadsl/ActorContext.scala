@@ -1,21 +1,20 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed.javadsl
 
 import java.time.Duration
-import java.util.function.{ BiFunction, Function => JFunction }
-
-import akka.annotation.DoNotInherit
-import akka.actor.ClassicActorContextProvider
-import akka.actor.typed._
 import java.util.Optional
 import java.util.concurrent.CompletionStage
 
+import scala.concurrent.ExecutionContextExecutor
+
 import org.slf4j.Logger
 
-import scala.concurrent.ExecutionContextExecutor
+import akka.actor.ClassicActorContextProvider
+import akka.actor.typed._
+import akka.annotation.DoNotInherit
 
 /**
  * An Actor is given by the combination of a [[Behavior]] and a context in
@@ -162,8 +161,7 @@ trait ActorContext[T] extends TypedActorContext[T] with ClassicActorContextProvi
   /**
    * Register for [[Terminated]] notification once the Actor identified by the
    * given [[ActorRef]] terminates. This message is also sent when the watched actor
-   * is on a node that has been removed from the cluster when using akka-cluster
-   * or has been marked unreachable when using akka-remote directly.
+   * is on a node that has been removed from the cluster when using Akka Cluster.
    *
    * `watch` is idempotent if it is not mixed with `watchWith`.
    *
@@ -178,8 +176,7 @@ trait ActorContext[T] extends TypedActorContext[T] with ClassicActorContextProvi
   /**
    * Register for termination notification with a custom message once the Actor identified by the
    * given [[ActorRef]] terminates. This message is also sent when the watched actor
-   * is on a node that has been removed from the cluster when using akka-cluster
-   * or has been marked unreachable when using akka-remote directly.
+   * is on a node that has been removed from the cluster when using Akka Cluster.
    *
    * `watchWith` is idempotent if it is called with the same `msg` and not mixed with `watch`.
    *
@@ -267,7 +264,7 @@ trait ActorContext[T] extends TypedActorContext[T] with ClassicActorContextProvi
    * *Warning*: This method is not thread-safe and must not be accessed from threads other
    * than the ordinary actor message processing thread, such as [[java.util.concurrent.CompletionStage]] callbacks.
    */
-  def messageAdapter[U](messageClass: Class[U], f: JFunction[U, T]): ActorRef[U]
+  def messageAdapter[U](messageClass: Class[U], f: akka.japi.function.Function[U, T]): ActorRef[U]
 
   /**
    * Perform a single request-response message interaction with another actor, and transform the messages back to
@@ -299,8 +296,8 @@ trait ActorContext[T] extends TypedActorContext[T] with ClassicActorContextProvi
       resClass: Class[Res],
       target: RecipientRef[Req],
       responseTimeout: Duration,
-      createRequest: java.util.function.Function[ActorRef[Res], Req],
-      applyToResponse: BiFunction[Res, Throwable, T]): Unit
+      createRequest: akka.japi.function.Function[ActorRef[Res], Req],
+      applyToResponse: akka.japi.function.Function2[Res, Throwable, T]): Unit
 
   /**
    * Sends the result of the given `CompletionStage` to this Actor (“`self`”), after adapted it with
@@ -309,6 +306,8 @@ trait ActorContext[T] extends TypedActorContext[T] with ClassicActorContextProvi
    * This method is thread-safe and can be called from other threads than the ordinary
    * actor message processing thread, such as [[java.util.concurrent.CompletionStage]] callbacks.
    */
-  def pipeToSelf[Value](future: CompletionStage[Value], applyToResult: BiFunction[Value, Throwable, T]): Unit
+  def pipeToSelf[Value](
+      future: CompletionStage[Value],
+      applyToResult: akka.japi.function.Function2[Value, Throwable, T]): Unit
 
 }

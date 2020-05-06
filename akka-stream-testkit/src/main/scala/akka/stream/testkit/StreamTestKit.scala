@@ -1,22 +1,24 @@
 /*
- * Copyright (C) 2014-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2014-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.testkit
+
+import java.io.PrintWriter
+import java.io.StringWriter
+import java.util.concurrent.CountDownLatch
+
+import scala.annotation.tailrec
+import scala.collection.immutable
+import scala.concurrent.duration._
+import scala.reflect.ClassTag
+
+import org.reactivestreams.{ Publisher, Subscriber, Subscription }
 
 import akka.actor.{ ActorRef, ActorSystem, DeadLetterSuppression, NoSerializationVerificationNeeded }
 import akka.stream._
 import akka.stream.impl._
 import akka.testkit.{ TestActor, TestProbe }
-import org.reactivestreams.{ Publisher, Subscriber, Subscription }
-
-import scala.annotation.tailrec
-import scala.collection.immutable
-import scala.concurrent.duration._
-import java.io.StringWriter
-import java.io.PrintWriter
-import java.util.concurrent.CountDownLatch
-
 import akka.testkit.TestActor.AutoPilot
 import akka.util.JavaDurationConverters
 import akka.util.ccompat._
@@ -30,10 +32,10 @@ object TestPublisher {
 
   trait PublisherEvent extends DeadLetterSuppression with NoSerializationVerificationNeeded
   final case class Subscribe(subscription: Subscription) extends PublisherEvent
-  final case class CancelSubscription(subscription: Subscription) extends PublisherEvent
+  final case class CancelSubscription(subscription: Subscription, cause: Throwable) extends PublisherEvent
   final case class RequestMore(subscription: Subscription, elements: Long) extends PublisherEvent
 
-  final object SubscriptionDone extends NoSerializationVerificationNeeded
+  object SubscriptionDone extends NoSerializationVerificationNeeded
 
   /**
    * Publisher that signals complete to subscribers, after handing a void subscription.
@@ -258,6 +260,24 @@ object TestPublisher {
       subscription.expectCancellation()
       this
     }
+
+    def expectCancellationWithCause(expectedCause: Throwable): Self = {
+      val cause = subscription.expectCancellation()
+      assert(cause == expectedCause, s"Expected cancellation cause to be $expectedCause but was $cause")
+      this
+    }
+    def expectCancellationWithCause[E <: Throwable: ClassTag](): E = subscription.expectCancellation() match {
+      case e: E => e
+      case cause =>
+        throw new AssertionError(
+          s"Expected cancellation cause to be of type ${scala.reflect.classTag[E]} but was ${cause.getClass}: $cause")
+    }
+
+    /**
+     * Java API
+     */
+    def expectCancellationWithCause[E <: Throwable](causeClass: Class[E]): E =
+      expectCancellationWithCause()(ClassTag(causeClass))
   }
 
 }
@@ -473,7 +493,7 @@ object TestSubscriber {
      * Depending on the `signalDemand` parameter demand may be signalled immediately after obtaining the subscription
      * in order to wake up a possibly lazy upstream. You can disable this by setting the `signalDemand` parameter to `false`.
      *
-     * See also [[#expectSubscriptionAndError()]].
+     * See also [[#expectSubscriptionAndError]].
      */
     def expectSubscriptionAndError(signalDemand: Boolean): Throwable = {
       val sub = expectSubscription()
@@ -799,6 +819,15 @@ object TestSubscriber {
       this
     }
 
+    def cancel(cause: Throwable): Self = subscription match {
+      case s: SubscriptionWithCancelException =>
+        s.cancel(cause)
+        this
+      case _ =>
+        throw new IllegalStateException(
+          "Tried to cancel with cause but upstream subscription doesn't support cancellation with cause")
+    }
+
     /**
      * Request and expect a stream element.
      */
@@ -834,19 +863,20 @@ private[testkit] object StreamTestKit {
   }
 
   final case class PublisherProbeSubscription[I](subscriber: Subscriber[_ >: I], publisherProbe: TestProbe)
-      extends Subscription {
+      extends Subscription
+      with SubscriptionWithCancelException {
     def request(elements: Long): Unit = publisherProbe.ref ! RequestMore(this, elements)
-    def cancel(): Unit = publisherProbe.ref ! CancelSubscription(this)
+    def cancel(cause: Throwable): Unit = publisherProbe.ref ! CancelSubscription(this, cause)
 
     def expectRequest(n: Long): Unit = publisherProbe.expectMsg(RequestMore(this, n))
     def expectRequest(): Long = publisherProbe.expectMsgPF(hint = "expecting request() signal") {
       case RequestMore(sub, n) if sub eq this => n
     }
 
-    def expectCancellation(): Unit = publisherProbe.fishForMessage(hint = "Expecting cancellation") {
-      case CancelSubscription(sub) if sub eq this => true
-      case RequestMore(sub, _) if sub eq this     => false
-    }
+    def expectCancellation(): Throwable =
+      publisherProbe.fishForSpecificMessage[Throwable](hint = "Expecting cancellation") {
+        case CancelSubscription(sub, cause) if sub eq this => cause
+      }
 
     def sendNext(element: I): Unit = subscriber.onNext(element)
     def sendComplete(): Unit = subscriber.onComplete()

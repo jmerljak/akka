@@ -1,14 +1,15 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed.internal
 
-import akka.actor.typed.{ Behavior, BehaviorInterceptor, Signal, TypedActorContext }
-import akka.annotation.InternalApi
+import scala.reflect.ClassTag
+
 import org.slf4j.MDC
 
-import scala.reflect.ClassTag
+import akka.actor.typed.{ Behavior, BehaviorInterceptor, Signal, TypedActorContext }
+import akka.annotation.InternalApi
 
 /**
  * INTERNAL API
@@ -26,7 +27,7 @@ import scala.reflect.ClassTag
 }
 
 /**
- * Support for Mapped Dagnostic Context for logging
+ * Support for Mapped Diagnostic Context for logging
  *
  * INTERNAL API
  */
@@ -90,12 +91,11 @@ import scala.reflect.ClassTag
   }
 
   private def setMdcValues(dynamicMdc: Map[String, String]): Unit = {
-    val mdcAdapter = MDC.getMDCAdapter
     if (staticMdc.nonEmpty) staticMdc.foreach {
-      case (key, value) => mdcAdapter.put(key, value)
+      case (key, value) => MDC.put(key, value)
     }
     if (dynamicMdc.nonEmpty) dynamicMdc.foreach {
-      case (key, value) => mdcAdapter.put(key, value)
+      case (key, value) => MDC.put(key, value)
     }
   }
 

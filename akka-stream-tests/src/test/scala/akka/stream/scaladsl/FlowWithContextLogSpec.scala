@@ -1,19 +1,18 @@
 /*
- * Copyright (C) 2014-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2014-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.scaladsl
 
 import akka.event.Logging
-import akka.stream.Attributes.LogLevels
 import akka.stream._
+import akka.stream.Attributes.LogLevels
 import akka.stream.testkit.ScriptedTest
 import akka.stream.testkit.StreamSpec
 import akka.testkit.TestProbe
 
 class FlowWithContextLogSpec extends StreamSpec("""
      akka.loglevel = DEBUG # test verifies logging
-     akka.actor.serialize-messages = off
      """) with ScriptedTest {
 
   val logProbe = {

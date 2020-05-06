@@ -1,19 +1,19 @@
 /*
- * Copyright (C) 2014-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2014-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.javadsl
 
-import akka.japi.{ function, Pair, Util }
-import akka.stream._
-import akka.event.LoggingAdapter
-import akka.util.ConstantFun
-
-import scala.annotation.unchecked.uncheckedVariance
-import akka.util.ccompat.JavaConverters._
 import java.util.concurrent.CompletionStage
 
+import scala.annotation.unchecked.uncheckedVariance
 import scala.compat.java8.FutureConverters._
+
+import akka.event.{ LogMarker, LoggingAdapter, MarkerLoggingAdapter }
+import akka.japi.{ function, Pair, Util }
+import akka.stream._
+import akka.util.ConstantFun
+import akka.util.ccompat.JavaConverters._
 
 object FlowWithContext {
 
@@ -67,9 +67,17 @@ final class FlowWithContext[In, CtxIn, Out, CtxOut, +Mat](
     viaScala(_.withAttributes(attr))
 
   /**
+   * Context-preserving variant of [[akka.stream.javadsl.Flow.mapError]].
+   *
+   * @see [[akka.stream.javadsl.Flow.mapError]]
+   */
+  def mapError(pf: PartialFunction[Throwable, Throwable]): FlowWithContext[In, CtxIn, Out, CtxOut, Mat] =
+    viaScala(_.mapError(pf))
+
+  /**
    * Context-preserving variant of [[akka.stream.javadsl.Flow.mapMaterializedValue]].
    *
-   * @see [[akka.stream.scaladsl.Flow.mapMaterializedValue]]
+   * @see [[akka.stream.javadsl.Flow.mapMaterializedValue]]
    */
   def mapMaterializedValue[Mat2](f: function.Function[Mat, Mat2]): FlowWithContext[In, CtxIn, Out, CtxOut, Mat2] =
     new FlowWithContext(delegate.mapMaterializedValue[Mat2](f))
@@ -229,6 +237,50 @@ final class FlowWithContext[In, CtxIn, Out, CtxOut, +Mat](
    */
   def log(name: String): FlowWithContext[In, CtxIn, Out, CtxOut, Mat] =
     this.log(name, ConstantFun.javaIdentityFunction[Out], null)
+
+  /**
+   * Context-preserving variant of [[akka.stream.javadsl.Flow.logWithMarker]].
+   *
+   * @see [[akka.stream.javadsl.Flow.logWithMarker]]
+   */
+  def logWithMarker(
+      name: String,
+      marker: function.Function2[Out, CtxOut, LogMarker],
+      extract: function.Function[Out, Any],
+      log: MarkerLoggingAdapter): FlowWithContext[In, CtxIn, Out, CtxOut, Mat] =
+    viaScala(_.logWithMarker(name, (e, c) => marker.apply(e, c), e => extract.apply(e))(log))
+
+  /**
+   * Context-preserving variant of [[akka.stream.javadsl.Flow.logWithMarker]].
+   *
+   * @see [[akka.stream.javadsl.Flow.logWithMarker]]
+   */
+  def logWithMarker(
+      name: String,
+      marker: function.Function2[Out, CtxOut, LogMarker],
+      extract: function.Function[Out, Any]): FlowWithContext[In, CtxIn, Out, CtxOut, Mat] =
+    this.logWithMarker(name, marker, extract, null)
+
+  /**
+   * Context-preserving variant of [[akka.stream.javadsl.Flow.logWithMarker]].
+   *
+   * @see [[akka.stream.javadsl.Flow.logWithMarker]]
+   */
+  def logWithMarker(
+      name: String,
+      marker: function.Function2[Out, CtxOut, LogMarker],
+      log: MarkerLoggingAdapter): FlowWithContext[In, CtxIn, Out, CtxOut, Mat] =
+    this.logWithMarker(name, marker, ConstantFun.javaIdentityFunction[Out], log)
+
+  /**
+   * Context-preserving variant of [[akka.stream.javadsl.Flow.logWithMarker]].
+   *
+   * @see [[akka.stream.javadsl.Flow.logWithMarker]]
+   */
+  def logWithMarker(
+      name: String,
+      marker: function.Function2[Out, CtxOut, LogMarker]): FlowWithContext[In, CtxIn, Out, CtxOut, Mat] =
+    this.logWithMarker(name, marker, ConstantFun.javaIdentityFunction[Out], null)
 
   def asScala: scaladsl.FlowWithContext[In, CtxIn, Out, CtxOut, Mat] =
     scaladsl.FlowWithContext.fromTuples(

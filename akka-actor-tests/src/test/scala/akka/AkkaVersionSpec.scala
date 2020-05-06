@@ -1,12 +1,13 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka
 
-import org.scalatest.{ Matchers, WordSpec }
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpec
 
-class AkkaVersionSpec extends WordSpec with Matchers {
+class AkkaVersionSpec extends AnyWordSpec with Matchers {
 
   "The Akka version check" must {
 
@@ -18,6 +19,7 @@ class AkkaVersionSpec extends WordSpec with Matchers {
 
     "succeed if version is RC and ok" in {
       AkkaVersion.require("AkkaVersionSpec", "2.5.6", "2.5.7-RC10")
+      AkkaVersion.require("AkkaVersionSpec", "2.6.0-RC1", "2.6.0-RC1")
     }
 
     "fail if version is RC and not ok" in {

@@ -1,33 +1,34 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote.artery
 
 import java.util.concurrent.TimeUnit
 
-import scala.concurrent.duration._
 import scala.concurrent.{ Future, Promise }
+import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
 import akka.Done
 import akka.actor.{ EmptyLocalActorRef, _ }
 import akka.event.Logging
+import akka.pattern.PromiseActorRef
+import akka.remote.{ MessageSerializer, OversizedPayloadException, RemoteActorRefProvider, UniqueAddress }
 import akka.remote.artery.Decoder.{
   AdvertiseActorRefsCompressionTable,
   AdvertiseClassManifestsCompressionTable,
   InboundCompressionAccess,
   InboundCompressionAccessImpl
 }
+import akka.remote.artery.OutboundHandshake.HandshakeReq
 import akka.remote.artery.SystemMessageDelivery.SystemMessageEnvelope
-import akka.remote.artery.compress.CompressionProtocol._
 import akka.remote.artery.compress._
-import akka.remote.{ MessageSerializer, OversizedPayloadException, RemoteActorRefProvider, UniqueAddress }
+import akka.remote.artery.compress.CompressionProtocol._
 import akka.serialization.{ Serialization, SerializationExtension, Serializers }
 import akka.stream._
 import akka.stream.stage._
 import akka.util.{ unused, OptionVal, Unsafe }
-import akka.remote.artery.OutboundHandshake.HandshakeReq
 
 /**
  * INTERNAL API
@@ -62,8 +63,11 @@ private[remote] class Encoder(
 
   override def createLogicAndMaterializedValue(
       inheritedAttributes: Attributes): (GraphStageLogic, OutboundCompressionAccess) = {
-    val logic = new GraphStageLogic(shape) with InHandler with OutHandler with StageLogging
-    with OutboundCompressionAccess {
+    val logic = new GraphStageLogic(shape)
+      with InHandler
+      with OutHandler
+      with StageLogging
+      with OutboundCompressionAccess {
 
       private val headerBuilder = HeaderBuilder.out()
       headerBuilder.setVersion(version)
@@ -301,7 +305,7 @@ private[remote] object Decoder {
      * External call from ChangeInboundCompression materialized value
      */
     override def currentCompressionOriginUids: Future[Set[Long]] = {
-      val p = Promise[Set[Long]]
+      val p = Promise[Set[Long]]()
       currentCompressionOriginUidsCb.invoke(p)
       p.future
     }
@@ -326,7 +330,14 @@ private[remote] final class ActorRefResolveCacheWithAddress(
 
   override protected def hash(k: String): Int = Unsafe.fastHash(k)
 
-  override protected def isCacheable(v: InternalActorRef): Boolean = !v.isInstanceOf[EmptyLocalActorRef]
+  override protected def isCacheable(v: InternalActorRef): Boolean =
+    v match {
+      case _: EmptyLocalActorRef => false
+      case _: PromiseActorRef    =>
+        // each of these are only for one request-response interaction so don't cache
+        false
+      case _ => true
+    }
 }
 
 /**
@@ -347,8 +358,11 @@ private[remote] class Decoder(
   val shape: FlowShape[EnvelopeBuffer, InboundEnvelope] = FlowShape(in, out)
 
   def createLogicAndMaterializedValue(inheritedAttributes: Attributes): (GraphStageLogic, InboundCompressionAccess) = {
-    val logic = new TimerGraphStageLogic(shape) with InboundCompressionAccessImpl with InHandler with OutHandler
-    with StageLogging {
+    val logic = new TimerGraphStageLogic(shape)
+      with InboundCompressionAccessImpl
+      with InHandler
+      with OutHandler
+      with StageLogging {
       import Decoder.RetryResolveRemoteDeployedRecipient
 
       override val compressions = inboundCompressions

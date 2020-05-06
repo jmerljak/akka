@@ -1,22 +1,61 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor
 
-import language.postfixOps
-import akka.testkit._
-import scala.concurrent.duration._
-import java.util.concurrent.atomic.AtomicInteger
-import scala.concurrent.Await
 import java.util.concurrent.TimeoutException
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+
+import scala.concurrent.Await
+import scala.concurrent.duration._
+
+import language.postfixOps
+
+import akka.testkit._
 
 object ReceiveTimeoutSpec {
   case object Tick
   case object TransparentTick extends NotInfluenceReceiveTimeout
+
+  class RestartingParent(probe: ActorRef) extends Actor {
+    val restarting = new AtomicBoolean(false)
+    val child = context.actorOf(Props(new RestartingChild(probe, restarting)))
+    def receive = {
+      case msg =>
+        child.forward(msg)
+    }
+  }
+  class RestartingChild(probe: ActorRef, restarting: AtomicBoolean) extends Actor {
+
+    override def preStart(): Unit = {
+      if (restarting.get) {
+        probe ! "restarting"
+        context.setReceiveTimeout(500.millis)
+      } else {
+        probe ! "starting"
+      }
+    }
+
+    override def postStop(): Unit = {
+      probe ! "stopping"
+    }
+
+    def receive = {
+      case "crash" =>
+        restarting.set(true)
+        probe ! "crashing"
+        throw TestException("boom bang")
+      case ReceiveTimeout =>
+        probe ! ReceiveTimeout
+      case other =>
+        probe ! other
+    }
+  }
 }
 
-class ReceiveTimeoutSpec extends AkkaSpec {
+class ReceiveTimeoutSpec extends AkkaSpec() {
   import ReceiveTimeoutSpec._
 
   "An actor with receive timeout" must {
@@ -28,7 +67,7 @@ class ReceiveTimeoutSpec extends AkkaSpec {
         context.setReceiveTimeout(500 milliseconds)
 
         def receive = {
-          case ReceiveTimeout => timeoutLatch.open
+          case ReceiveTimeout => timeoutLatch.open()
         }
       }))
 
@@ -44,7 +83,7 @@ class ReceiveTimeoutSpec extends AkkaSpec {
 
         def receive = {
           case Tick           => ()
-          case ReceiveTimeout => timeoutLatch.open
+          case ReceiveTimeout => timeoutLatch.open()
         }
       }))
 
@@ -65,7 +104,7 @@ class ReceiveTimeoutSpec extends AkkaSpec {
           case Tick => ()
           case ReceiveTimeout =>
             count.incrementAndGet
-            timeoutLatch.open
+            timeoutLatch.open()
             context.setReceiveTimeout(Duration.Undefined)
         }
       }))
@@ -82,7 +121,7 @@ class ReceiveTimeoutSpec extends AkkaSpec {
 
       val timeoutActor = system.actorOf(Props(new Actor {
         def receive = {
-          case ReceiveTimeout => timeoutLatch.open
+          case ReceiveTimeout => timeoutLatch.open()
         }
       }))
 
@@ -97,7 +136,7 @@ class ReceiveTimeoutSpec extends AkkaSpec {
         context.setReceiveTimeout(1 second)
 
         def receive = {
-          case ReceiveTimeout  => timeoutLatch.open
+          case ReceiveTimeout  => timeoutLatch.open()
           case TransparentTick =>
         }
       }))
@@ -141,7 +180,7 @@ class ReceiveTimeoutSpec extends AkkaSpec {
         context.setReceiveTimeout(1 second)
         def receive: Receive = {
           case ReceiveTimeout =>
-            timeoutLatch.open
+            timeoutLatch.open()
           case TransparentTick =>
             count.incrementAndGet()
         }
@@ -160,7 +199,7 @@ class ReceiveTimeoutSpec extends AkkaSpec {
       val timeoutActor = system.actorOf(Props(new Actor {
         def receive = {
           case TransparentTick => context.setReceiveTimeout(500 milliseconds)
-          case ReceiveTimeout  => timeoutLatch.open
+          case ReceiveTimeout  => timeoutLatch.open()
         }
       }))
 
@@ -178,7 +217,7 @@ class ReceiveTimeoutSpec extends AkkaSpec {
 
         def receive = {
           case TransparentTick => context.setReceiveTimeout(Duration.Inf)
-          case ReceiveTimeout  => timeoutLatch.open
+          case ReceiveTimeout  => timeoutLatch.open()
         }
       }))
 
@@ -197,7 +236,7 @@ class ReceiveTimeoutSpec extends AkkaSpec {
 
         def receive: Receive = {
           case TransparentTick => context.setReceiveTimeout(Duration.Undefined)
-          case ReceiveTimeout  => timeoutLatch.open
+          case ReceiveTimeout  => timeoutLatch.open()
         }
       }))
 
@@ -236,6 +275,20 @@ class ReceiveTimeoutSpec extends AkkaSpec {
       // now should happen
       probe.expectMsgType[ReceiveTimeout]
       system.stop(timeoutActor)
+    }
+
+    // #28266 reproducer
+    "get the timeout when scheduled immediately on restart" in {
+      val probe = TestProbe()
+      val ref = system.actorOf(Props(new RestartingParent(probe.ref)))
+      probe.expectMsg("starting")
+      EventFilter.error("boom bang", occurrences = 1).intercept {
+        ref ! "crash"
+      }
+      probe.expectMsg("crashing")
+      probe.expectMsg("stopping")
+      probe.expectMsg("restarting")
+      probe.expectMsg(ReceiveTimeout)
     }
   }
 }

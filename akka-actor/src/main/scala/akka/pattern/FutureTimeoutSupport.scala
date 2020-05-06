@@ -1,17 +1,19 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.pattern
 
-import scala.concurrent.{ ExecutionContext, Future, Promise }
-import akka.actor._
-import scala.util.control.NonFatal
-import scala.concurrent.duration.FiniteDuration
-import java.util.concurrent.CompletionStage
 import java.util.concurrent.CompletableFuture
-import akka.dispatch.Futures
+import java.util.concurrent.CompletionStage
 import java.util.function.BiConsumer
+
+import scala.concurrent.{ ExecutionContext, Future, Promise }
+import scala.concurrent.duration.FiniteDuration
+import scala.util.control.NonFatal
+
+import akka.actor._
+import akka.dispatch.Futures
 
 trait FutureTimeoutSupport {
 

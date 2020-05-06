@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2019-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.persistence.typed.scaladsl
@@ -7,6 +7,10 @@ package akka.persistence.typed.scaladsl
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.concurrent.duration._
+
+import com.typesafe.config.Config
+import com.typesafe.config.ConfigFactory
+import org.scalatest.wordspec.AnyWordSpecLike
 
 import akka.actor.testkit.typed.scaladsl._
 import akka.actor.typed.ActorRef
@@ -17,9 +21,6 @@ import akka.persistence.journal.SteppingInmemJournal
 import akka.persistence.typed.PersistenceId
 import akka.persistence.typed.RecoveryFailed
 import akka.persistence.typed.internal.JournalFailureException
-import com.typesafe.config.Config
-import com.typesafe.config.ConfigFactory
-import org.scalatest.WordSpecLike
 
 object EventSourcedBehaviorRecoveryTimeoutSpec {
 
@@ -51,13 +52,13 @@ object EventSourcedBehaviorRecoveryTimeoutSpec {
 
 class EventSourcedBehaviorRecoveryTimeoutSpec
     extends ScalaTestWithActorTestKit(EventSourcedBehaviorRecoveryTimeoutSpec.config)
-    with WordSpecLike
+    with AnyWordSpecLike
     with LogCapturing {
 
   import EventSourcedBehaviorRecoveryTimeoutSpec._
 
   val pidCounter = new AtomicInteger(0)
-  private def nextPid(): PersistenceId = PersistenceId(s"c${pidCounter.incrementAndGet()})")
+  private def nextPid(): PersistenceId = PersistenceId.ofUniqueId(s"c${pidCounter.incrementAndGet()})")
 
   import akka.actor.typed.scaladsl.adapter._
   // needed for SteppingInmemJournal.step
@@ -85,10 +86,10 @@ class EventSourcedBehaviorRecoveryTimeoutSpec
 
       // now replay, but don't give the journal any tokens to replay events
       // so that we cause the timeout to trigger
-      LoggingEventFilter
+      LoggingTestKit
         .error[JournalFailureException]
         .withMessageRegex("Exception during recovery.*Replay timed out")
-        .intercept {
+        .expect {
           val replaying = spawn(testBehavior(pid, probe.ref))
 
           // initial read highest

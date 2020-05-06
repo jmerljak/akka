@@ -1,13 +1,13 @@
 /*
- * Copyright (C) 2014-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2014-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream
 
-import org.scalatest.Matchers
-import org.scalatest.WordSpec
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpec
 
-class DslFactoriesConsistencySpec extends WordSpec with Matchers {
+class DslFactoriesConsistencySpec extends AnyWordSpec with Matchers {
 
   // configuration //
 
@@ -21,7 +21,16 @@ class DslFactoriesConsistencySpec extends WordSpec with Matchers {
       "toString",
       "getClass",
       "shape",
-      "identityTraversalBuilder")
+      "identityTraversalBuilder",
+      // futures in scaladsl vs completion stage in javadsl
+      "lazyFutureSource", // lazyCompletionStageSource
+      "futureSource", // completionStageSource
+      "lazyFuture", // lazyCompletionStage
+      "lazyFutureFlow", // lazyCompletionStageFlow
+      "futureFlow", // completionStageFlow
+      "futureSink", // completionStageSink
+      "lazyFutureSink" // lazyCompletionStageSink
+    )
 
   val javaIgnore =
     Set("adapt") // the scaladsl -> javadsl bridge
@@ -142,8 +151,10 @@ class DslFactoriesConsistencySpec extends WordSpec with Matchers {
       Ignore(_ == akka.stream.scaladsl.Sink.getClass, _ == "collection", _ => true, _ => true),
       Ignore(_ == akka.stream.scaladsl.Sink.getClass, _ == "actorRef", _ => true, _ => true), // Internal in scaladsl
       Ignore(_ == akka.stream.scaladsl.Sink.getClass, _ == "actorRefWithAck", _ => true, _ => true), // Internal in scaladsl
+      Ignore(_ == akka.stream.scaladsl.Sink.getClass, _ == "actorRefWithBackpressure", _ => true, _ => true), // Internal in scaladsl
       Ignore(_ == akka.stream.scaladsl.Source.getClass, _ == "actorRef", _ => true, _ => true), // Internal in scaladsl
       Ignore(_ == akka.stream.scaladsl.Source.getClass, _ == "actorRefWithAck", _ => true, _ => true), // Internal in scaladsl
+      Ignore(_ == akka.stream.scaladsl.Source.getClass, _ == "actorRefWithBackpressure", _ => true, _ => true), // Internal in scaladsl
       Ignore(_ == akka.stream.scaladsl.BidiFlow.getClass, _ == "apply", _ == 24, _ => true),
       Ignore(_ == akka.stream.scaladsl.GraphDSL.getClass, _ == "runnable", _ == 24, _ => true),
       Ignore(_ == akka.stream.scaladsl.GraphDSL.getClass, _ == "create", _ == 24, _ => true),

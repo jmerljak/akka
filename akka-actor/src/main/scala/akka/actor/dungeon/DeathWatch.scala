@@ -1,13 +1,13 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.dungeon
 
-import akka.dispatch.sysmsg.{ DeathWatchNotification, Unwatch, Watch }
-import akka.event.Logging.{ Debug, Warning }
 import akka.actor.{ Actor, ActorCell, ActorRef, ActorRefScope, Address, InternalActorRef, Terminated }
+import akka.dispatch.sysmsg.{ DeathWatchNotification, Unwatch, Watch }
 import akka.event.AddressTerminatedTopic
+import akka.event.Logging.{ Debug, Warning }
 import akka.util.unused
 
 private[akka] trait DeathWatch { this: ActorCell =>

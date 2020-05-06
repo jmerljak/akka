@@ -4,13 +4,10 @@ Apply a reduction function on the incoming elements and pass the result to the n
 
 @ref[Sink operators](../index.md#sink-operators)
 
-@@@div { .group-scala }
-
 ## Signature
 
-@@signature [Sink.scala](/akka-stream/src/main/scala/akka/stream/scaladsl/Sink.scala) { #reduce }
+@apidoc[Sink.reduce](Sink$) { scala="#reduce[T](f:(T,T)=&gt;T):akka.stream.scaladsl.Sink[T,scala.concurrent.Future[T]]" java="#reduce(akka.japi.function.Function2)" }
 
-@@@
 
 ## Description
 
@@ -19,14 +16,6 @@ receives the two first elements of the flow.
 
 Materializes into a @scala[`Future`] @java[`CompletionStage`] that will be completed by the last result of the reduction function.
 
-@@@div { .callout }
-
-**cancels** never
-
-**backpressures** when the previous reduction function invocation has not yet completed
-
-@@@
-
 ## Example
 
 Scala
@@ -34,3 +23,13 @@ Scala
 
 Java
 :   @@snip [SinkDocExamples.java](/akka-docs/src/test/java/jdocs/stream/operators/SinkDocExamples.java) { #reduce-operator-example }
+
+## Reactive Streams semantics
+
+@@@div { .callout }
+
+**cancels** never
+
+**backpressures** when the previous reduction function invocation has not yet completed
+
+@@@

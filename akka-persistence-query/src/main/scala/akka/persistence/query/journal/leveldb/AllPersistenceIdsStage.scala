@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2019-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.persistence.query.journal.leveldb
@@ -39,6 +39,8 @@ final private[akka] class AllPersistenceIdsStage(liveQuery: Boolean, writeJourna
       setHandler(out, this)
       val journal: ActorRef = Persistence(eagerMaterializer.system).journalFor(writeJournalPluginId)
       var initialResponseReceived = false
+
+      override protected def logSource: Class[_] = classOf[AllPersistenceIdsStage]
 
       override def preStart(): Unit = {
         journal.tell(LeveldbJournal.SubscribeAllPersistenceIds, getStageActor(journalInteraction).ref)

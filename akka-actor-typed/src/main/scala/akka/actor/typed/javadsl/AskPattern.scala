@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed
@@ -8,12 +8,12 @@ package javadsl
 import java.time.Duration
 import java.util.concurrent.CompletionStage
 
+import scala.compat.java8.FutureConverters._
+
 import akka.actor.typed.Scheduler
 import akka.actor.typed.scaladsl.AskPattern._
 import akka.japi.function.{ Function => JFunction }
 import akka.util.JavaDurationConverters._
-
-import scala.compat.java8.FutureConverters._
 
 /**
  * The ask-pattern implements the initiator side of a request–reply protocol.
@@ -37,8 +37,8 @@ object AskPattern {
    */
   def ask[Req, Res](
       actor: RecipientRef[Req],
-      message: JFunction[ActorRef[Res], Req],
+      messageFactory: JFunction[ActorRef[Res], Req],
       timeout: Duration,
       scheduler: Scheduler): CompletionStage[Res] =
-    (actor.ask(message.apply)(timeout.asScala, scheduler)).toJava
+    (actor.ask(messageFactory.apply)(timeout.asScala, scheduler)).toJava
 }

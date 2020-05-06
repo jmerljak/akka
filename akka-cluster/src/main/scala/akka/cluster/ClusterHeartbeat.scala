@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster
@@ -8,20 +8,20 @@ import java.util.concurrent.TimeUnit
 
 import scala.annotation.tailrec
 import scala.collection.immutable
-import akka.actor.{
-  Actor,
-  ActorLogging,
-  ActorPath,
-  ActorSelection,
-  Address,
-  DeadLetterSuppression,
-  Props,
-  RootActorPath
-}
+
+import akka.actor.Actor
+import akka.actor.ActorPath
+import akka.actor.ActorSelection
+import akka.actor.Address
+import akka.actor.DeadLetterSuppression
+import akka.actor.Props
+import akka.actor.RootActorPath
+import akka.annotation.InternalApi
 import akka.cluster.ClusterEvent._
+import akka.event.ActorWithLogClass
+import akka.event.Logging
 import akka.remote.FailureDetectorRegistry
 import akka.remote.HeartbeatMessage
-import akka.annotation.InternalApi
 import akka.util.ccompat._
 
 /**
@@ -31,7 +31,7 @@ import akka.util.ccompat._
  */
 @InternalApi
 @ccompatUsedUntil213
-private[cluster] final class ClusterHeartbeatReceiver(getCluster: () => Cluster) extends Actor with ActorLogging {
+private[cluster] final class ClusterHeartbeatReceiver(getCluster: () => Cluster) extends Actor {
   import ClusterHeartbeatSender._
 
   // Important - don't use Cluster(context.system) in constructor because that would
@@ -40,10 +40,14 @@ private[cluster] final class ClusterHeartbeatReceiver(getCluster: () => Cluster)
 
   lazy val verboseHeartbeat = cluster.settings.Debug.VerboseHeartbeatLogging
 
+  private lazy val clusterLogger =
+    new cluster.ClusterLogger(
+      Logging.withMarker(context.system, ActorWithLogClass(this, ClusterLogClass.ClusterHeartbeat)))
+
   def receive: Receive = {
     case hb: Heartbeat =>
       // TODO log the sequence nr once serializer is enabled
-      if (verboseHeartbeat) cluster.ClusterLogger.logDebug("Heartbeat from [{}]", hb.from)
+      if (verboseHeartbeat) clusterLogger.logDebug("Heartbeat from [{}]", hb.from)
       sender() ! HeartbeatRsp(cluster.selfUniqueAddress, hb.sequenceNr, hb.creationTimeNanos)
   }
 
@@ -93,15 +97,21 @@ private[cluster] object ClusterHeartbeatSender {
  * a few other nodes, which will reply and then this actor updates the
  * failure detector.
  */
-private[cluster] class ClusterHeartbeatSender extends Actor with ActorLogging {
+private[cluster] class ClusterHeartbeatSender extends Actor {
   import ClusterHeartbeatSender._
 
   val cluster = Cluster(context.system)
-  import cluster.ClusterLogger._
   val verboseHeartbeat = cluster.settings.Debug.VerboseHeartbeatLogging
-  import cluster.{ scheduler, selfAddress, selfUniqueAddress }
+  import cluster.scheduler
+  import cluster.selfAddress
+  import cluster.selfUniqueAddress
   import cluster.settings._
   import context.dispatcher
+
+  private val clusterLogger =
+    new cluster.ClusterLogger(
+      Logging.withMarker(context.system, ActorWithLogClass(this, ClusterLogClass.ClusterHeartbeat)))
+  import clusterLogger._
 
   val filterInternalClusterMembers: Member => Boolean =
     _.dataCenter == cluster.selfDataCenter
@@ -219,6 +229,7 @@ private[cluster] class ClusterHeartbeatSender extends Actor with ActorLogging {
     val now = System.nanoTime()
     if ((now - tickTimestamp) >= (HeartbeatInterval.toNanos * 2))
       logWarning(
+        ClusterLogMarker.heartbeatStarvation,
         "Scheduled sending of heartbeat was delayed. " +
         "Previous heartbeat was sent [{}] ms ago, expected interval is [{}] ms. This may cause failure detection " +
         "to mark members as unreachable. The reason can be thread starvation, e.g. by running blocking tasks on the " +

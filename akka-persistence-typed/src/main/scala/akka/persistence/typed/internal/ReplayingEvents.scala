@@ -1,11 +1,11 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.persistence.typed.internal
 
-import scala.util.control.NonFatal
 import scala.concurrent.duration._
+import scala.util.control.NonFatal
 
 import akka.actor.typed.{ Behavior, Signal }
 import akka.actor.typed.internal.PoisonPill
@@ -13,18 +13,19 @@ import akka.actor.typed.internal.UnstashException
 import akka.actor.typed.scaladsl.{ AbstractBehavior, ActorContext, Behaviors, LoggerOps }
 import akka.annotation.{ InternalApi, InternalStableApi }
 import akka.event.Logging
-import akka.persistence.JournalProtocol._
 import akka.persistence._
+import akka.persistence.JournalProtocol._
 import akka.persistence.typed.EmptyEventSeq
 import akka.persistence.typed.EventsSeq
-import akka.persistence.typed.RecoveryFailed
 import akka.persistence.typed.RecoveryCompleted
+import akka.persistence.typed.RecoveryFailed
 import akka.persistence.typed.SingleEventSeq
+import akka.persistence.typed.internal.EventSourcedBehaviorImpl.GetState
 import akka.persistence.typed.internal.ReplayingEvents.ReplayingState
 import akka.persistence.typed.internal.Running.WithSeqNrAccessible
 import akka.util.OptionVal
-import akka.util.unused
 import akka.util.PrettyDuration._
+import akka.util.unused
 
 /***
  * INTERNAL API
@@ -65,7 +66,7 @@ private[akka] object ReplayingEvents {
 private[akka] final class ReplayingEvents[C, E, S](
     override val setup: BehaviorSetup[C, E, S],
     var state: ReplayingState[S])
-    extends AbstractBehavior[InternalProtocol]
+    extends AbstractBehavior[InternalProtocol](setup.context)
     with JournalInteractions[C, E, S]
     with SnapshotInteractions[C, E, S]
     with StashManagement[C, E, S]
@@ -87,11 +88,12 @@ private[akka] final class ReplayingEvents[C, E, S](
 
   override def onMessage(msg: InternalProtocol): Behavior[InternalProtocol] = {
     msg match {
-      case JournalResponse(r)      => onJournalResponse(r)
-      case SnapshotterResponse(r)  => onSnapshotterResponse(r)
-      case RecoveryTickEvent(snap) => onRecoveryTick(snap)
-      case cmd: IncomingCommand[C] => onCommand(cmd)
-      case RecoveryPermitGranted   => Behaviors.unhandled // should not happen, we already have the permit
+      case JournalResponse(r)          => onJournalResponse(r)
+      case SnapshotterResponse(r)      => onSnapshotterResponse(r)
+      case RecoveryTickEvent(snap)     => onRecoveryTick(snap)
+      case cmd: IncomingCommand[C]     => onCommand(cmd)
+      case get: GetState[S @unchecked] => stashInternal(get)
+      case RecoveryPermitGranted       => Behaviors.unhandled // should not happen, we already have the permit
     }
   }
 
@@ -100,8 +102,8 @@ private[akka] final class ReplayingEvents[C, E, S](
       state = state.copy(receivedPoisonPill = true)
       this
     case signal =>
-      setup.onSignal(state.state, signal, catchAndLog = true)
-      this
+      if (setup.onSignal(state.state, signal, catchAndLog = true)) this
+      else Behaviors.unhandled
   }
 
   private def onJournalResponse(response: JournalProtocol.Response): Behavior[InternalProtocol] = {
@@ -133,7 +135,9 @@ private[akka] final class ReplayingEvents[C, E, S](
               onRecoveryFailure(ex, eventForErrorReporting.toOption)
           }
 
-        case RecoverySuccess(highestSeqNr) =>
+        case RecoverySuccess(highestJournalSeqNr) =>
+          val highestSeqNr = Math.max(highestJournalSeqNr, state.seqNr)
+          state = state.copy(seqNr = highestSeqNr)
           setup.log.debug("Recovery successful, recovered until sequenceNr: [{}]", highestSeqNr)
           onRecoveryCompleted(state)
 
@@ -160,7 +164,6 @@ private[akka] final class ReplayingEvents[C, E, S](
       Behaviors.unhandled
     } else {
       stashInternal(cmd)
-      Behaviors.same
     }
   }
 
@@ -186,9 +189,10 @@ private[akka] final class ReplayingEvents[C, E, S](
   }
 
   /**
-   * Called whenever a message replay fails. By default it logs the error.
+   * Called whenever a message replay fails.
    *
-   * The actor is always stopped after this method has been invoked.
+   * This method throws `JournalFailureException` which will be caught by the internal
+   * supervision strategy to stop or restart the actor with backoff.
    *
    * @param cause failure cause.
    * @param event the event that was being processed when the exception was thrown
@@ -228,6 +232,7 @@ private[akka] final class ReplayingEvents[C, E, S](
           setup.persistenceId,
           (System.nanoTime() - state.recoveryStartTime).nanos.pretty)
       }
+
       setup.onSignal(state.state, RecoveryCompleted, catchAndLog = false)
 
       if (state.receivedPoisonPill && isInternalStashEmpty && !isUnstashAllInProgress)

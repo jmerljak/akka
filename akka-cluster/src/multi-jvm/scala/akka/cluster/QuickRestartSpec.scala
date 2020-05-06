@@ -1,18 +1,19 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster
 
 import java.util.concurrent.ThreadLocalRandom
 
+import scala.collection.immutable
+import scala.concurrent.duration._
+
+import com.typesafe.config.ConfigFactory
+
 import akka.actor.{ ActorSystem, Address }
 import akka.remote.testkit.{ MultiNodeConfig, MultiNodeSpec }
 import akka.testkit._
-import com.typesafe.config.ConfigFactory
-
-import scala.collection.immutable
-import scala.concurrent.duration._
 
 // This test was a reproducer for issue #20639
 object QuickRestartMultiJvmSpec extends MultiNodeConfig {
@@ -21,10 +22,12 @@ object QuickRestartMultiJvmSpec extends MultiNodeConfig {
   val third = role("third")
 
   commonConfig(
-    debugConfig(on = false).withFallback(ConfigFactory.parseString("""
-      akka.cluster.auto-down-unreachable-after = off
+    debugConfig(on = false)
+      .withFallback(ConfigFactory.parseString("""
+      akka.cluster.testkit.auto-down-unreachable-after = off
       akka.cluster.allow-weakly-up-members = off
-      """)).withFallback(MultiNodeClusterSpec.clusterConfig))
+      """))
+      .withFallback(MultiNodeClusterSpec.clusterConfig))
 
 }
 

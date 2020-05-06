@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2019-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster
@@ -13,15 +13,16 @@ import akka.actor.Actor
 import akka.actor.ActorLogging
 import akka.actor.ActorRef
 import akka.actor.ActorSystem
+import akka.actor.ClassicActorSystemProvider
 import akka.actor.ExtendedActorSystem
 import akka.actor.Extension
 import akka.actor.ExtensionId
 import akka.actor.ExtensionIdProvider
 import akka.actor.Props
 import akka.cluster.TestLeaseActor.{ Acquire, Create, Release }
-import akka.event.Logging
 import akka.coordination.lease.LeaseSettings
 import akka.coordination.lease.scaladsl.Lease
+import akka.event.Logging
 import akka.pattern.ask
 import akka.testkit.JavaSerializable
 import akka.util.Timeout
@@ -35,7 +36,7 @@ object TestLeaseActor {
   final case class Release(owner: String) extends LeaseRequest
   final case class Create(leaseName: String, ownerName: String) extends JavaSerializable
 
-  final case object GetRequests extends JavaSerializable
+  case object GetRequests extends JavaSerializable
   final case class LeaseRequests(requests: List[LeaseRequest]) extends JavaSerializable
   final case class ActionRequest(request: LeaseRequest, result: Any) extends JavaSerializable // boolean of Failure
 }
@@ -73,6 +74,7 @@ class TestLeaseActor extends Actor with ActorLogging {
 
 object TestLeaseActorClientExt extends ExtensionId[TestLeaseActorClientExt] with ExtensionIdProvider {
   override def get(system: ActorSystem): TestLeaseActorClientExt = super.get(system)
+  override def get(system: ClassicActorSystemProvider): TestLeaseActorClientExt = super.get(system)
   override def lookup = TestLeaseActorClientExt
   override def createExtension(system: ExtendedActorSystem): TestLeaseActorClientExt =
     new TestLeaseActorClientExt(system)
@@ -101,7 +103,7 @@ class TestLeaseActorClient(settings: LeaseSettings, system: ExtendedActorSystem)
   log.info("lease created {}", settings)
   leaseActor ! Create(settings.leaseName, settings.ownerName)
 
-  private implicit val timeout = Timeout(100.seconds)
+  private implicit val timeout: Timeout = Timeout(100.seconds)
 
   override def acquire(): Future[Boolean] = {
     (leaseActor ? Acquire(settings.ownerName)).mapTo[Boolean]

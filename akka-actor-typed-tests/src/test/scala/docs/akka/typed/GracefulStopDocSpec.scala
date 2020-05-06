@@ -1,21 +1,23 @@
 /*
- * Copyright (C) 2014-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2014-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package docs.akka.typed
 
 //#imports
-import akka.actor.testkit.typed.scaladsl.LogCapturing
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ ActorSystem, PostStop }
 
 //#imports
 
+import akka.actor.testkit.typed.scaladsl.LogCapturing
+import akka.actor.typed.ActorRef
 import org.slf4j.Logger
 import scala.concurrent.duration._
 import scala.concurrent.Await
-import org.scalatest.WordSpecLike
+import org.scalatest.wordspec.AnyWordSpecLike
+import akka.actor.typed.Terminated
 
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 
@@ -26,7 +28,7 @@ object GracefulStopDocSpec {
   object MasterControlProgram {
     sealed trait Command
     final case class SpawnJob(name: String) extends Command
-    final case object GracefulShutdown extends Command
+    case object GracefulShutdown extends Command
 
     // Predefined cleanup operation
     def cleanup(log: Logger): Unit = log.info("Cleaning up!")
@@ -72,9 +74,65 @@ object GracefulStopDocSpec {
   }
   //#worker-actor
 
+  object IllustrateWatch {
+    //#master-actor-watch
+
+    object MasterControlProgram {
+      sealed trait Command
+      final case class SpawnJob(name: String) extends Command
+
+      def apply(): Behavior[Command] = {
+        Behaviors
+          .receive[Command] { (context, message) =>
+            message match {
+              case SpawnJob(jobName) =>
+                context.log.info("Spawning job {}!", jobName)
+                val job = context.spawn(Job(jobName), name = jobName)
+                context.watch(job)
+                Behaviors.same
+            }
+          }
+          .receiveSignal {
+            case (context, Terminated(ref)) =>
+              context.log.info("Job stopped: {}", ref.path.name)
+              Behaviors.same
+          }
+      }
+    }
+    //#master-actor-watch
+  }
+
+  object IllustrateWatchWith {
+    //#master-actor-watchWith
+
+    object MasterControlProgram {
+      sealed trait Command
+      final case class SpawnJob(name: String, replyToWhenDone: ActorRef[JobDone]) extends Command
+      final case class JobDone(name: String)
+      private final case class JobTerminated(name: String, replyToWhenDone: ActorRef[JobDone]) extends Command
+
+      def apply(): Behavior[Command] = {
+        Behaviors.receive { (context, message) =>
+          message match {
+            case SpawnJob(jobName, replyToWhenDone) =>
+              context.log.info("Spawning job {}!", jobName)
+              val job = context.spawn(Job(jobName), name = jobName)
+              context.watchWith(job, JobTerminated(jobName, replyToWhenDone))
+              Behaviors.same
+            case JobTerminated(jobName, replyToWhenDone) =>
+              context.log.info("Job stopped: {}", jobName)
+              replyToWhenDone ! JobDone(jobName)
+              Behaviors.same
+          }
+        }
+      }
+    }
+    //#master-actor-watchWith
+  }
+
 }
 
-class GracefulStopDocSpec extends ScalaTestWithActorTestKit with WordSpecLike with LogCapturing {
+class GracefulStopDocSpec extends ScalaTestWithActorTestKit with AnyWordSpecLike with LogCapturing {
 
   import GracefulStopDocSpec._
 

@@ -1,15 +1,15 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed.javadsl
 
-import java.util.function.Consumer
 import java.util.function.{ Function => JFunction }
 
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl
 import akka.annotation.DoNotInherit
+import akka.japi.function.Procedure
 
 /**
  * A non thread safe mutable message buffer that can be used to buffer messages inside actors
@@ -43,6 +43,13 @@ import akka.annotation.DoNotInherit
   def size: Int
 
   /**
+   * What is the capacity of this buffer.
+   *
+   * @return the capacity of this buffer
+   */
+  def capacity: Int
+
+  /**
    * @return `true` if no more messages can be added, i.e. size equals the capacity of the stash buffer
    */
   def isFull: Boolean
@@ -72,7 +79,12 @@ import akka.annotation.DoNotInherit
    *
    * @param f the function to apply to each element
    */
-  def forEach(f: Consumer[T]): Unit
+  def forEach(f: Procedure[T]): Unit
+
+  /**
+   * Removes all messages from the buffer.
+   */
+  def clear(): Unit
 
   /**
    * Process all stashed messages with the `behavior` and the returned

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote.artery
@@ -15,6 +15,15 @@ import java.security.SecureRandom
 
 import scala.util.Try
 
+import com.typesafe.config.Config
+import javax.net.ssl.KeyManager
+import javax.net.ssl.KeyManagerFactory
+import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLEngine
+import javax.net.ssl.SSLSession
+import javax.net.ssl.TrustManager
+import javax.net.ssl.TrustManagerFactory
+
 import akka.actor.ActorSystem
 import akka.actor.ExtendedActorSystem
 import akka.actor.setup.Setup
@@ -25,14 +34,6 @@ import akka.event.MarkerLoggingAdapter
 import akka.japi.Util.immutableSeq
 import akka.stream.TLSRole
 import akka.util.ccompat._
-import com.typesafe.config.Config
-import javax.net.ssl.KeyManager
-import javax.net.ssl.KeyManagerFactory
-import javax.net.ssl.SSLContext
-import javax.net.ssl.SSLEngine
-import javax.net.ssl.SSLSession
-import javax.net.ssl.TrustManager
-import javax.net.ssl.TrustManagerFactory
 
 @ccompatUsedUntil213
 trait SSLEngineProvider {
@@ -88,12 +89,9 @@ class ConfigSSLEngineProvider(protected val config: Config, protected val log: M
     if (HostnameVerification)
       log.debug("TLS/SSL hostname verification is enabled.")
     else
-      log.warning(
+      log.info(
         LogMarker.Security,
-        "TLS/SSL hostname verification is disabled. " +
-        "Please configure akka.remote.artery.ssl.config-ssl-engine.hostname-verification=on " +
-        "and ensure the X.509 certificate on the host is correct to remove this warning. " +
-        "See Akka reference documentation for more information.")
+        "TLS/SSL hostname verification is disabled. See Akka reference documentation for more information.")
 
     constructContext()
   }
@@ -213,7 +211,7 @@ object SSLEngineProviderSetup {
  * when the SSLEngineProvider implementation require other external constructor parameters
  * or is created before the ActorSystem is created.
  *
- * Constructor is *Internal API*, use factories in [[SSLEngineProviderSetup()]]
+ * Constructor is *Internal API*, use factories in [[SSLEngineProviderSetup]]
  */
 class SSLEngineProviderSetup private (val sslEngineProvider: ExtendedActorSystem => SSLEngineProvider) extends Setup
 

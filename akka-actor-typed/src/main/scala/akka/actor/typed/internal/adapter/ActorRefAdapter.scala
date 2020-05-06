@@ -1,14 +1,14 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed
 package internal
 package adapter
 
+import akka.{ actor => classic }
 import akka.actor.ActorRefProvider
 import akka.actor.InvalidMessageException
-import akka.{ actor => classic }
 import akka.annotation.InternalApi
 import akka.dispatch.sysmsg
 

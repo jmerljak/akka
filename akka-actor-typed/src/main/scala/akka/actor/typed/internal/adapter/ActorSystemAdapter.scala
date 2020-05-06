@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed.internal.adapter
@@ -9,11 +9,12 @@ import java.util.concurrent.CompletionStage
 import scala.compat.java8.FutureConverters
 import scala.concurrent.ExecutionContextExecutor
 
+import org.slf4j.{ Logger, LoggerFactory }
+
+import akka.{ actor => classic }
 import akka.Done
 import akka.actor
-import akka.actor.ActorRefProvider
-import akka.actor.ExtendedActorSystem
-import akka.actor.InvalidMessageException
+import akka.actor.{ ActorRefProvider, Address, ExtendedActorSystem, InvalidMessageException }
 import akka.actor.typed.ActorRef
 import akka.actor.typed.ActorSystem
 import akka.actor.typed.Behavior
@@ -22,6 +23,7 @@ import akka.actor.typed.Dispatchers
 import akka.actor.typed.Props
 import akka.actor.typed.Scheduler
 import akka.actor.typed.Settings
+import akka.actor.typed.SupervisorStrategy
 import akka.actor.typed.internal.ActorRefImpl
 import akka.actor.typed.internal.ExtensionsImpl
 import akka.actor.typed.internal.InternalRecipientRef
@@ -29,9 +31,8 @@ import akka.actor.typed.internal.PropsImpl.DispatcherDefault
 import akka.actor.typed.internal.PropsImpl.DispatcherFromConfig
 import akka.actor.typed.internal.PropsImpl.DispatcherSameAsParent
 import akka.actor.typed.internal.SystemMessage
+import akka.actor.typed.scaladsl.Behaviors
 import akka.annotation.InternalApi
-import akka.{ actor => classic }
-import org.slf4j.{ Logger, LoggerFactory }
 
 /**
  * INTERNAL API. Lightweight wrapper for presenting a classic ActorSystem to a Behavior (via the context).
@@ -52,7 +53,7 @@ import org.slf4j.{ Logger, LoggerFactory }
 
   import ActorRefAdapter.sendSystemMessage
 
-  override private[akka] def classicSystem: classic.ActorSystem = system
+  override def classicSystem: classic.ActorSystem = system
 
   // Members declared in akka.actor.typed.ActorRef
   override def tell(msg: T): Unit = {
@@ -77,6 +78,10 @@ import org.slf4j.{ Logger, LoggerFactory }
 
   // Members declared in akka.actor.typed.ActorSystem
   override def deadLetters[U]: ActorRef[U] = ActorRefAdapter(system.deadLetters)
+
+  private val cachedIgnoreRef: ActorRef[Nothing] = ActorRefAdapter(provider.ignoreRef)
+  override def ignoreRef[U]: ActorRef[U] = cachedIgnoreRef.unsafeUpcast[U]
+
   override def dispatchers: Dispatchers = new Dispatchers {
     override def lookup(selector: DispatcherSelector): ExecutionContextExecutor =
       selector match {
@@ -98,18 +103,25 @@ import org.slf4j.{ Logger, LoggerFactory }
   override def uptime: Long = classicSystem.uptime
   override def printTree: String = system.printTree
 
-  import akka.dispatch.ExecutionContexts.sameThreadExecutionContext
+  import akka.dispatch.ExecutionContexts.parasitic
 
   override def terminate(): Unit = system.terminate()
   override lazy val whenTerminated: scala.concurrent.Future[akka.Done] =
-    system.whenTerminated.map(_ => Done)(sameThreadExecutionContext)
+    system.whenTerminated.map(_ => Done)(parasitic)
   override lazy val getWhenTerminated: CompletionStage[akka.Done] =
     FutureConverters.toJava(whenTerminated)
 
   override def systemActorOf[U](behavior: Behavior[U], name: String, props: Props): ActorRef[U] = {
-    val ref = system.systemActorOf(PropsAdapter(() => behavior, props), name)
+    val ref = system.systemActorOf(
+      PropsAdapter(
+        () => Behaviors.supervise(behavior).onFailure(SupervisorStrategy.stop),
+        props,
+        rethrowTypedFailure = false),
+      name)
     ActorRefAdapter(ref)
   }
+
+  override def address: Address = system.provider.getDefaultAddress
 
 }
 
@@ -145,12 +157,5 @@ private[akka] object ActorSystemAdapter {
       new LoadTypedExtensions(system)
   }
 
-  def toClassic[U](sys: ActorSystem[_]): classic.ActorSystem =
-    sys match {
-      case adapter: ActorSystemAdapter[_] => adapter.classicSystem
-      case _ =>
-        throw new UnsupportedOperationException(
-          "Only adapted classic ActorSystem permissible " +
-          s"($sys of class ${sys.getClass.getName})")
-    }
+  def toClassic[U](sys: ActorSystem[_]): classic.ActorSystem = sys.classicSystem
 }

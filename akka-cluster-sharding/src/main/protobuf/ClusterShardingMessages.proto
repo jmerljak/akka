@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2015-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 syntax = "proto2";
@@ -101,4 +101,19 @@ message StartEntity {
 message StartEntityAck {
     required string entityId = 1;
     required string shardId = 2;
+}
+
+message CurrentShardState {
+    required string shardId = 1;
+    repeated string entityIds = 2;
+}
+
+message ShardState {
+    required string shardId = 1;
+    repeated string entityIds = 2;
+}
+
+message CurrentShardRegionState {
+  repeated ShardState shards = 1;
+  repeated string failed = 2;
 }

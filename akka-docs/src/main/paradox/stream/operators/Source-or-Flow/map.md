@@ -16,6 +16,12 @@ Transform each element in the stream by calling a mapping function with it and p
 
 Transform each element in the stream by calling a mapping function with it and passing the returned value downstream.
 
+## Examples
+
+Scala
+:  @@snip [Flow.scala](/akka-docs/src/test/scala/docs/stream/operators/Map.scala) { #imports #map }
+
+## Reactive Streams semantics
 
 @@@div { .callout }
 
@@ -26,12 +32,3 @@ Transform each element in the stream by calling a mapping function with it and p
 **completes** when upstream completes
 
 @@@
-
-## Examples
-
-
-Scala
-:  @@snip [Flow.scala](/akka-docs/src/test/scala/docs/stream/operators/Map.scala) { #imports #map }
-
-
-

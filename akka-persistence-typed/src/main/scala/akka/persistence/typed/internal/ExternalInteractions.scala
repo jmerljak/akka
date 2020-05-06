@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.persistence.typed.internal
@@ -16,11 +16,9 @@ import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.scaladsl.LoggerOps
 import akka.annotation.InternalApi
 import akka.annotation.InternalStableApi
-
+import akka.persistence._
 import akka.persistence.JournalProtocol.ReplayMessages
 import akka.persistence.SnapshotProtocol.LoadSnapshot
-import akka.persistence._
-
 import akka.util.unused
 
 /** INTERNAL API */
@@ -102,11 +100,8 @@ private[akka] trait JournalInteractions[C, E, S] {
 
   protected def replayEvents(fromSeqNr: Long, toSeqNr: Long): Unit = {
     setup.log.debug2("Replaying messages: from: {}, to: {}", fromSeqNr, toSeqNr)
-    setup.journal ! ReplayMessages(
-      fromSeqNr,
-      toSeqNr,
-      setup.recovery.replayMax,
-      setup.persistenceId.id,
+    setup.journal.tell(
+      ReplayMessages(fromSeqNr, toSeqNr, setup.recovery.replayMax, setup.persistenceId.id, setup.selfClassic),
       setup.selfClassic)
   }
 
@@ -143,9 +138,10 @@ private[akka] trait JournalInteractions[C, E, S] {
     if (toSequenceNr > 0) {
       val self = setup.selfClassic
 
-      if (toSequenceNr == Long.MaxValue || toSequenceNr <= lastSequenceNr)
-        setup.journal ! JournalProtocol.DeleteMessagesTo(setup.persistenceId.id, toSequenceNr, self)
-      else
+      if (toSequenceNr == Long.MaxValue || toSequenceNr <= lastSequenceNr) {
+        setup.log.debug("Deleting events up to sequenceNr [{}]", toSequenceNr)
+        setup.journal.tell(JournalProtocol.DeleteMessagesTo(setup.persistenceId.id, toSequenceNr, self), self)
+      } else
         self ! DeleteMessagesFailure(
           new RuntimeException(
             s"toSequenceNr [$toSequenceNr] must be less than or equal to lastSequenceNr [$lastSequenceNr]"),

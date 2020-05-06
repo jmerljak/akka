@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed.javadsl;
@@ -15,8 +15,6 @@ public class RoutersTest {
     Behavior<String> group = Routers.group(key).withRandomRouting().withRoundRobinRouting();
 
     Behavior<String> pool =
-        Routers.pool(5, () -> Behaviors.<String>empty())
-            .withRandomRouting()
-            .withRoundRobinRouting();
+        Routers.pool(5, Behaviors.<String>empty()).withRandomRouting().withRoundRobinRouting();
   }
 }

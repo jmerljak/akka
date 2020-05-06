@@ -1,15 +1,16 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor
 
+import scala.annotation.varargs
+import scala.collection.immutable
+import scala.reflect.ClassTag
+
 import akka.actor.Deploy.{ NoDispatcherGiven, NoMailboxGiven }
 import akka.dispatch._
 import akka.routing._
-
-import scala.collection.immutable
-import scala.reflect.ClassTag
 
 /**
  * Factory for Props instances.
@@ -38,7 +39,7 @@ object Props extends AbstractProps {
   /**
    * A Props instance whose creator will create an actor that doesn't respond to any message
    */
-  final val empty = Props[EmptyActor]
+  final val empty = Props[EmptyActor]()
 
   /**
    * The default Props instance, uses the settings from the Props object starting with default*.
@@ -191,6 +192,19 @@ final case class Props(deploy: Deploy, clazz: Class[_], args: immutable.Seq[Any]
    * Returns a new Props with the specified deployment configuration.
    */
   def withDeploy(d: Deploy): Props = copy(deploy = d.withFallback(deploy))
+
+  /**
+   * Returns a new Props with the specified set of tags.
+   */
+  @varargs
+  def withActorTags(tags: String*): Props =
+    withActorTags(tags.toSet)
+
+  /**
+   * Scala API: Returns a new Props with the specified set of tags.
+   */
+  def withActorTags(tags: Set[String]): Props =
+    copy(deploy = deploy.withTags(tags))
 
   /**
    * Obtain an upper-bound approximation of the actor class which is going to

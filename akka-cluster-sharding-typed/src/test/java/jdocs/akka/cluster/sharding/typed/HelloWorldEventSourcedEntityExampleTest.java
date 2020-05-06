@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package jdocs.akka.cluster.sharding.typed;
@@ -12,12 +12,13 @@ import akka.cluster.sharding.typed.javadsl.EntityRef;
 import akka.cluster.sharding.typed.javadsl.Entity;
 import akka.cluster.typed.Cluster;
 import akka.cluster.typed.Join;
+import akka.persistence.typed.PersistenceId;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
-import org.scalatest.junit.JUnitSuite;
+import org.scalatestplus.junit.JUnitSuite;
 
 import static jdocs.akka.cluster.sharding.typed.HelloWorldPersistentEntityExample.*;
 import static org.junit.Assert.assertEquals;
@@ -47,9 +48,13 @@ public class HelloWorldEventSourcedEntityExampleTest extends JUnitSuite {
 
       ClusterSharding sharding = ClusterSharding.get(testKit.system());
       sharding.init(
-          Entity.ofEventSourcedEntity(
+          Entity.of(
               HelloWorld.ENTITY_TYPE_KEY,
-              ctx -> new HelloWorld(ctx.getActorContext(), ctx.getEntityId())));
+              entityContext ->
+                  HelloWorld.create(
+                      entityContext.getEntityId(),
+                      PersistenceId.of(
+                          entityContext.getEntityTypeKey().name(), entityContext.getEntityId()))));
       _sharding = sharding;
     }
     return _sharding;

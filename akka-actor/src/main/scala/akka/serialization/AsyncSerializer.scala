@@ -1,14 +1,16 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.serialization
 
 import java.util.concurrent.CompletionStage
 
-import akka.actor.ExtendedActorSystem
-import scala.concurrent.duration.Duration
 import scala.concurrent.{ Await, Future }
+import scala.concurrent.duration.Duration
+
+import akka.actor.ExtendedActorSystem
+import akka.event.Logging
 
 /**
  * Serializer that supports async serialization.
@@ -38,15 +40,18 @@ trait AsyncSerializer {
 abstract class AsyncSerializerWithStringManifest(system: ExtendedActorSystem)
     extends SerializerWithStringManifest
     with AsyncSerializer {
+
+  private val log = Logging(system, getClass)
+
   final override def toBinary(o: AnyRef): Array[Byte] = {
-    system.log.warning(
+    log.warning(
       "Async serializer called synchronously. This will block. Async serializers should only be used for akka persistence plugins that support them. Class: {}",
       o.getClass)
     Await.result(toBinaryAsync(o), Duration.Inf)
   }
 
   final override def fromBinary(bytes: Array[Byte], manifest: String): AnyRef = {
-    system.log.warning(
+    log.warning(
       "Async serializer called synchronously. This will block. Async serializers should only be used for akka persistence plugins that support them. Manifest: [{}]",
       manifest)
     Await.result(fromBinaryAsync(bytes, manifest), Duration.Inf)

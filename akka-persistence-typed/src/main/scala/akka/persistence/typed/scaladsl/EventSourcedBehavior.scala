@@ -1,22 +1,22 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.persistence.typed.scaladsl
 
 import scala.annotation.tailrec
+
 import akka.actor.typed.BackoffSupervisorStrategy
 import akka.actor.typed.Behavior
-import akka.actor.typed.internal.BehaviorImpl.DeferredBehavior
 import akka.actor.typed.Signal
+import akka.actor.typed.internal.BehaviorImpl.DeferredBehavior
 import akka.actor.typed.internal.InterceptorImpl
 import akka.actor.typed.internal.LoggerClass
 import akka.actor.typed.scaladsl.ActorContext
 import akka.annotation.DoNotInherit
 import akka.persistence.typed.EventAdapter
-import akka.persistence.typed.SnapshotAdapter
-import akka.persistence.typed.ExpectingReply
 import akka.persistence.typed.PersistenceId
+import akka.persistence.typed.SnapshotAdapter
 import akka.persistence.typed.SnapshotSelectionCriteria
 import akka.persistence.typed.internal._
 
@@ -44,6 +44,11 @@ object EventSourcedBehavior {
 
   /**
    * Create a `Behavior` for a persistent actor.
+   *
+   * @param persistenceId stable unique identifier for the event sourced behavior
+   * @param emptyState the intial state for the entity before any events have been processed
+   * @param commandHandler map commands to effects e.g. persisting events, replying to commands
+   * @param eventHandler compute the new state given the current state when an event has been persisted
    */
   def apply[Command, Event, State](
       persistenceId: PersistenceId,
@@ -57,14 +62,14 @@ object EventSourcedBehavior {
   /**
    * Create a `Behavior` for a persistent actor that is enforcing that replies to commands are not forgotten.
    * Then there will be compilation errors if the returned effect isn't a [[ReplyEffect]], which can be
-   * created with [[Effect.reply]], [[Effect.noReply]], [[Effect.thenReply]], or [[Effect.thenNoReply]].
+   * created with [[Effect.reply]], [[Effect.noReply]], [[EffectBuilder.thenReply]], or [[EffectBuilder.thenNoReply]].
    */
-  def withEnforcedReplies[Command <: ExpectingReply[_], Event, State](
+  def withEnforcedReplies[Command, Event, State](
       persistenceId: PersistenceId,
       emptyState: State,
       commandHandler: (State, Command) => ReplyEffect[Event, State],
       eventHandler: (State, Event) => State): EventSourcedBehavior[Command, Event, State] = {
-    val loggerClass = LoggerClass.detectLoggerClassFromStack(classOf[EventSourcedBehavior[_, _, _]])
+    val loggerClass = LoggerClass.detectLoggerClassFromStack(classOf[EventSourcedBehavior[_, _, _]], logPrefixSkipList)
     EventSourcedBehaviorImpl(persistenceId, emptyState, commandHandler, eventHandler, loggerClass)
   }
 
@@ -153,6 +158,7 @@ object EventSourcedBehavior {
    * You may configure the behavior to skip replaying snapshots completely, in which case the recovery will be
    * performed by replaying all events -- which may take a long time.
    */
+  @deprecated("use withRecovery(Recovery.withSnapshotSelectionCriteria(...))", "2.6.5")
   def withSnapshotSelectionCriteria(selection: SnapshotSelectionCriteria): EventSourcedBehavior[Command, Event, State]
 
   /**
@@ -203,4 +209,10 @@ object EventSourcedBehavior {
    * If not specified the actor will be stopped on failure.
    */
   def onPersistFailure(backoffStrategy: BackoffSupervisorStrategy): EventSourcedBehavior[Command, Event, State]
+
+  /**
+   * Change the recovery strategy.
+   * By default, snapshots and events are recovered.
+   */
+  def withRecovery(recovery: Recovery): EventSourcedBehavior[Command, Event, State]
 }

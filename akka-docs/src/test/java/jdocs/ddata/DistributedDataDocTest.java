@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2015-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package jdocs.ddata;
@@ -387,7 +387,7 @@ public class DistributedDataDocTest extends AbstractJavaTest {
 
   public void demonstrateORSet() {
     // #orset
-    final Cluster node = Cluster.get(system);
+    final SelfUniqueAddress node = DistributedData.get(system).selfUniqueAddress();
     final ORSet<String> s0 = ORSet.create();
     final ORSet<String> s1 = s0.add(node, "a");
     final ORSet<String> s2 = s1.add(node, "b");

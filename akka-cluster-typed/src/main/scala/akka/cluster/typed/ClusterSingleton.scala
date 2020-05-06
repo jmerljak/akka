@@ -1,10 +1,16 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster.typed
 
-import akka.actor.NoSerializationVerificationNeeded
+import scala.concurrent.duration._
+import scala.concurrent.duration.{ Duration, FiniteDuration }
+
+import com.typesafe.config.Config
+
+import akka.actor.typed.{ ActorRef, ActorSystem, Behavior, Extension, ExtensionId, Props }
+import akka.actor.typed.ExtensionSetup
 import akka.annotation.{ DoNotInherit, InternalApi }
 import akka.cluster.ClusterSettings.DataCenter
 import akka.cluster.singleton.{
@@ -12,13 +18,7 @@ import akka.cluster.singleton.{
   ClusterSingletonManagerSettings => ClassicClusterSingletonManagerSettings
 }
 import akka.cluster.typed.internal.AdaptedClusterSingletonImpl
-import akka.actor.typed.{ ActorRef, ActorSystem, Behavior, Extension, ExtensionId, Props }
 import akka.util.JavaDurationConverters._
-import com.typesafe.config.Config
-import scala.concurrent.duration._
-import scala.concurrent.duration.{ Duration, FiniteDuration }
-
-import akka.actor.typed.ExtensionSetup
 
 object ClusterSingletonSettings {
   def apply(system: ActorSystem[_]): ClusterSingletonSettings =
@@ -50,8 +50,7 @@ final class ClusterSingletonSettings(
     val singletonIdentificationInterval: FiniteDuration,
     val removalMargin: FiniteDuration,
     val handOverRetryInterval: FiniteDuration,
-    val bufferSize: Int)
-    extends NoSerializationVerificationNeeded {
+    val bufferSize: Int) {
 
   def withRole(role: String): ClusterSingletonSettings = copy(role = Some(role))
 
@@ -205,7 +204,6 @@ abstract class ClusterSingleton extends Extension {
 }
 
 object ClusterSingletonManagerSettings {
-  import akka.actor.typed.scaladsl.adapter._
 
   /**
    * Create settings from the default configuration
@@ -213,7 +211,7 @@ object ClusterSingletonManagerSettings {
    */
   def apply(system: ActorSystem[_]): ClusterSingletonManagerSettings =
     apply(system.settings.config.getConfig("akka.cluster.singleton"))
-      .withRemovalMargin(akka.cluster.Cluster(system.toClassic).downingProvider.downRemovalMargin)
+      .withRemovalMargin(akka.cluster.Cluster(system).downingProvider.downRemovalMargin)
 
   /**
    * Create settings from a configuration with the same layout as
@@ -270,8 +268,7 @@ final class ClusterSingletonManagerSettings(
     val singletonName: String,
     val role: Option[String],
     val removalMargin: FiniteDuration,
-    val handOverRetryInterval: FiniteDuration)
-    extends NoSerializationVerificationNeeded {
+    val handOverRetryInterval: FiniteDuration) {
 
   def withSingletonName(name: String): ClusterSingletonManagerSettings = copy(singletonName = name)
 
@@ -300,9 +297,7 @@ final class ClusterSingletonManagerSettings(
 
 object ClusterSingletonSetup {
   def apply[T <: Extension](createExtension: ActorSystem[_] => ClusterSingleton): ClusterSingletonSetup =
-    new ClusterSingletonSetup(new java.util.function.Function[ActorSystem[_], ClusterSingleton] {
-      override def apply(sys: ActorSystem[_]): ClusterSingleton = createExtension(sys)
-    }) // TODO can be simplified when compiled only with Scala >= 2.12
+    new ClusterSingletonSetup(createExtension(_))
 
 }
 

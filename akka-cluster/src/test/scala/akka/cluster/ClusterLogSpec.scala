@@ -1,17 +1,19 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster
 
+import com.typesafe.config.{ Config, ConfigFactory }
+
 import akka.actor.{ Address, ExtendedActorSystem }
 import akka.testkit.{ AkkaSpec, EventFilter, ImplicitSender }
-import com.typesafe.config.{ Config, ConfigFactory }
 
 object ClusterLogSpec {
   val config = """
     akka.cluster {
-      auto-down-unreachable-after = 0s
+      downing-provider-class = akka.cluster.testkit.AutoDowning
+      testkit.auto-down-unreachable-after = 0s
       publish-stats-interval = 0 s # always, when it happens
       failure-detector.implementation-class = akka.cluster.FailureDetectorPuppet
     }

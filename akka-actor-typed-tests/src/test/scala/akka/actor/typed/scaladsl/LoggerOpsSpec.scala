@@ -1,14 +1,15 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed.scaladsl
 
-import akka.actor.testkit.typed.scaladsl.LoggingEventFilter
-import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import akka.actor.testkit.typed.scaladsl.LogCapturing
-import org.scalatest.WordSpecLike
+import org.scalatest.wordspec.AnyWordSpecLike
 import org.slf4j.LoggerFactory
+
+import akka.actor.testkit.typed.scaladsl.LogCapturing
+import akka.actor.testkit.typed.scaladsl.LoggingTestKit
+import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 
 object LoggerOpsSpec {
   case class Value1(i: Int)
@@ -16,7 +17,7 @@ object LoggerOpsSpec {
   case class Value3(i: Int)
 }
 
-class LoggerOpsSpec extends ScalaTestWithActorTestKit with WordSpecLike with LogCapturing {
+class LoggerOpsSpec extends ScalaTestWithActorTestKit with AnyWordSpecLike with LogCapturing {
   import LoggerOpsSpec._
 
   val log = LoggerFactory.getLogger(getClass)
@@ -24,52 +25,52 @@ class LoggerOpsSpec extends ScalaTestWithActorTestKit with WordSpecLike with Log
   "LoggerOps" must {
 
     "provide extension method for 2 arguments" in {
-      LoggingEventFilter.info("[template a b]").intercept {
+      LoggingTestKit.info("[template a b]").expect {
         log.info2("[template {} {}]", "a", "b")
       }
-      LoggingEventFilter.info("[template a 2]").intercept {
+      LoggingTestKit.info("[template a 2]").expect {
         log.info2("[template {} {}]", "a", 2)
       }
-      LoggingEventFilter.info("[template 1 2]").intercept {
+      LoggingTestKit.info("[template 1 2]").expect {
         log.info2("[template {} {}]", 1, 2)
       }
-      LoggingEventFilter.info("[template 1 b]").intercept {
+      LoggingTestKit.info("[template 1 b]").expect {
         log.info2("[template {} {}]", 1, "b")
       }
-      LoggingEventFilter.info("[template a Value2(2)]").intercept {
+      LoggingTestKit.info("[template a Value2(2)]").expect {
         log.info2("[template {} {}]", "a", Value2(2))
       }
-      LoggingEventFilter.info("[template Value1(1) Value1(1)]").intercept {
+      LoggingTestKit.info("[template Value1(1) Value1(1)]").expect {
         log.info2("[template {} {}]", Value1(1), Value1(1))
       }
-      LoggingEventFilter.info("[template Value1(1) Value2(2)]").intercept {
+      LoggingTestKit.info("[template Value1(1) Value2(2)]").expect {
         log.info2("[template {} {}]", Value1(1), Value2(2))
       }
     }
 
     "provide extension method for vararg arguments" in {
-      LoggingEventFilter.info("[template a b c]").intercept {
+      LoggingTestKit.info("[template a b c]").expect {
         log.infoN("[template {} {} {}]", "a", "b", "c")
       }
-      LoggingEventFilter.info("[template a b 3]").intercept {
+      LoggingTestKit.info("[template a b 3]").expect {
         log.infoN("[template {} {} {}]", "a", "b", 3)
       }
-      LoggingEventFilter.info("[template a 2 c]").intercept {
+      LoggingTestKit.info("[template a 2 c]").expect {
         log.infoN("[template {} {} {}]", "a", 2, "c")
       }
-      LoggingEventFilter.info("[template 1 2 3]").intercept {
+      LoggingTestKit.info("[template 1 2 3]").expect {
         log.infoN("[template {} {} {}]", 1, 2, 3)
       }
-      LoggingEventFilter.info("[template 1 b c]").intercept {
+      LoggingTestKit.info("[template 1 b c]").expect {
         log.infoN("[template {} {} {}]", 1, "b", "c")
       }
-      LoggingEventFilter.info("[template a Value2(2) Value3(3)]").intercept {
+      LoggingTestKit.info("[template a Value2(2) Value3(3)]").expect {
         log.infoN("[template {} {} {}]", "a", Value2(2), Value3(3))
       }
-      LoggingEventFilter.info("[template Value1(1) Value1(1) Value1(1)]").intercept {
+      LoggingTestKit.info("[template Value1(1) Value1(1) Value1(1)]").expect {
         log.infoN("[template {} {} {}]", Value1(1), Value1(1), Value1(1))
       }
-      LoggingEventFilter.info("[template Value1(1) Value2(2) Value3(3)]").intercept {
+      LoggingTestKit.info("[template Value1(1) Value2(2) Value3(3)]").expect {
         log.infoN("[template {} {} {}]", Value1(1), Value2(2), Value3(3))
       }
     }

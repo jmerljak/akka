@@ -1,21 +1,22 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.javadsl
 
 import java.util.Optional
 import java.util.function.{ Consumer, Supplier }
+
+import scala.compat.java8.OptionConverters
+import scala.util.Try
+
+import com.typesafe.sslconfig.akka.AkkaSSLConfig
 import javax.net.ssl.{ SSLContext, SSLEngine, SSLSession }
 
 import akka.{ japi, NotUsed }
 import akka.stream._
 import akka.stream.TLSProtocol._
 import akka.util.ByteString
-import com.typesafe.sslconfig.akka.AkkaSSLConfig
-
-import scala.compat.java8.OptionConverters
-import scala.util.Try
 
 /**
  * Stream cipher support based upon JSSE.
@@ -30,10 +31,8 @@ import scala.util.Try
  * documentation. The philosophy of this integration into Akka Streams is to
  * expose all knobs and dials to client code and therefore not limit the
  * configuration possibilities. In particular the client code will have to
- * provide the SSLContext from which the SSLEngine is then created. Handshake
- * parameters are set using [[NegotiateNewSession]] messages, the settings for
- * the initial handshake need to be provided up front using the same class;
- * please refer to the method documentation below.
+ * provide the SSLEngine, which is typically created from a SSLContext. Handshake
+ * parameters and other parameters are defined when creating the SSLEngine.
  *
  * '''IMPORTANT NOTE'''
  *
@@ -66,6 +65,7 @@ object TLS {
    *
    * This method uses the default closing behavior or [[IgnoreComplete]].
    */
+  @deprecated("Use create that takes a SSLEngine factory instead. Setup the SSLEngine with needed parameters.", "2.6.0")
   def create(
       sslContext: SSLContext,
       sslConfig: Optional[AkkaSSLConfig],
@@ -84,6 +84,7 @@ object TLS {
    *
    * This method uses the default closing behavior or [[IgnoreComplete]].
    */
+  @deprecated("Use create that takes a SSLEngine factory instead. Setup the SSLEngine with needed parameters.", "2.6.0")
   def create(
       sslContext: SSLContext,
       firstSession: NegotiateNewSession,
@@ -106,6 +107,7 @@ object TLS {
    * The SSLEngine may use this information e.g. when an endpoint identification algorithm was
    * configured using [[javax.net.ssl.SSLParameters.setEndpointIdentificationAlgorithm]].
    */
+  @deprecated("Use create that takes a SSLEngine factory instead. Setup the SSLEngine with needed parameters.", "2.6.0")
   def create(
       sslContext: SSLContext,
       sslConfig: Optional[AkkaSSLConfig],
@@ -138,6 +140,7 @@ object TLS {
    * The SSLEngine may use this information e.g. when an endpoint identification algorithm was
    * configured using [[javax.net.ssl.SSLParameters.setEndpointIdentificationAlgorithm]].
    */
+  @deprecated("Use create that takes a SSLEngine factory instead. Setup the SSLEngine with needed parameters.", "2.6.0")
   def create(
       sslContext: SSLContext,
       firstSession: NegotiateNewSession,
@@ -156,7 +159,7 @@ object TLS {
   /**
    * Create a StreamTls [[akka.stream.javadsl.BidiFlow]]. This is a low-level interface.
    *
-   * You can specify a constructor `sslEngineCreator` to create an SSLEngine that must already be configured for
+   * You specify a factory `sslEngineCreator` to create an SSLEngine that must already be configured for
    * client and server mode and with all the parameters for the first session.
    *
    * You can specify a verification function `sessionVerifier` that will be called
@@ -174,7 +177,7 @@ object TLS {
   /**
    * Create a StreamTls [[akka.stream.javadsl.BidiFlow]]. This is a low-level interface.
    *
-   * You can specify a constructor `sslEngineCreator` to create an SSLEngine that must already be configured for
+   * You specify a factory `sslEngineCreator` to create an SSLEngine that must already be configured for
    * client and server mode and with all the parameters for the first session.
    *
    * For a description of the `closing` parameter please refer to [[TLSClosing]].

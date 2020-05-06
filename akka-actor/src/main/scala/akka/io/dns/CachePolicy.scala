@@ -1,12 +1,13 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.io.dns
 
-import akka.util.JavaDurationConverters._
-
 import scala.concurrent.duration.{ Duration, FiniteDuration, _ }
+
+import akka.annotation.InternalApi
+import akka.util.JavaDurationConverters._
 
 object CachePolicy {
 
@@ -39,6 +40,16 @@ object CachePolicy {
       new Ttl(value)
     }
     def fromPositive(value: java.time.Duration): Ttl = fromPositive(value.asScala)
+
+    /**
+     * INTERNAL API
+     */
+    @InternalApi
+    private[akka] def toTll(policy: CachePolicy): Ttl = policy match {
+      case Never    => Ttl.never
+      case Forever  => Ttl.effectivelyForever
+      case ttl: Ttl => ttl
+    }
 
     // DNS RFC states that zero values are interpreted to mean that the RR should not be cached
     val never: Ttl = new Ttl(0.seconds)

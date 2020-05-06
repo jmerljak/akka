@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.typed.javadsl;
@@ -45,7 +45,7 @@ public class ActorSourceSinkCompileTest {
 
     Source.<String>queue(10, OverflowStrategy.dropBuffer())
         .to(
-            ActorSink.actorRefWithAck(
+            ActorSink.actorRefWithBackpressure(
                 ref,
                 (sender, msg) -> new Init(),
                 (sender) -> new Msg(),

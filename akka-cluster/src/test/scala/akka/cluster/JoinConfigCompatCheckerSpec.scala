@@ -1,14 +1,15 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster
 
-import akka.testkit.{ AkkaSpec, LongRunningTest }
+import scala.collection.{ immutable => im }
+import scala.concurrent.duration._
+
 import com.typesafe.config.{ Config, ConfigFactory }
 
-import scala.concurrent.duration._
-import scala.collection.{ immutable => im }
+import akka.testkit.{ AkkaSpec, LongRunningTest }
 
 object JoinConfigCompatCheckerSpec {
 
@@ -259,7 +260,8 @@ class JoinConfigCompatCheckerSpec extends AkkaSpec with ClusterTestKit {
             akka.cluster {
 
               # using explicit downing provider class
-              downing-provider-class = "akka.cluster.AutoDowning"
+              downing-provider-class = "akka.cluster.testkit.AutoDowning"
+              testkit.auto-down-unreachable-after = 0s
 
               configuration-compatibility-check {
                 enforce-on-join = on

@@ -1,22 +1,23 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.io.dns.internal
 
 import java.net.{ InetAddress, InetSocketAddress }
 
-import akka.actor.Status.Failure
-import akka.actor.{ Actor, ActorLogging, ActorRef, NoSerializationVerificationNeeded, Props, Stash }
-import akka.annotation.InternalApi
-import akka.io.dns.{ RecordClass, RecordType, ResourceRecord }
-import akka.io.{ IO, Tcp, Udp }
-import akka.pattern.{ BackoffOpts, BackoffSupervisor }
+import scala.collection.{ immutable => im }
+import scala.concurrent.duration._
+import scala.util.Try
+
 import com.github.ghik.silencer.silent
 
-import scala.collection.{ immutable => im }
-import scala.util.Try
-import scala.concurrent.duration._
+import akka.actor.{ Actor, ActorLogging, ActorRef, NoSerializationVerificationNeeded, Props, Stash }
+import akka.actor.Status.Failure
+import akka.annotation.InternalApi
+import akka.io.{ IO, Tcp, Udp }
+import akka.io.dns.{ RecordClass, RecordType, ResourceRecord }
+import akka.pattern.{ BackoffOpts, BackoffSupervisor }
 
 /**
  * INTERNAL API
@@ -39,7 +40,6 @@ import scala.concurrent.duration._
 @InternalApi private[akka] class DnsClient(ns: InetSocketAddress) extends Actor with ActorLogging with Stash {
 
   import DnsClient._
-
   import context.system
 
   val udp = IO(Udp)
@@ -78,24 +78,25 @@ import scala.concurrent.duration._
     case DropRequest(id) =>
       log.debug("Dropping request [{}]", id)
       inflightRequests -= id
+
     case Question4(id, name) =>
       log.debug("Resolving [{}] (A)", name)
       val msg = message(name, id, RecordType.A)
-      inflightRequests += (id -> (sender(), msg))
+      inflightRequests += (id -> (sender() -> msg))
       log.debug("Message [{}] to [{}]: [{}]", id, ns, msg)
       socket ! Udp.Send(msg.write(), ns)
 
     case Question6(id, name) =>
       log.debug("Resolving [{}] (AAAA)", name)
       val msg = message(name, id, RecordType.AAAA)
-      inflightRequests += (id -> (sender(), msg))
+      inflightRequests += (id -> (sender() -> msg))
       log.debug("Message to [{}]: [{}]", ns, msg)
       socket ! Udp.Send(msg.write(), ns)
 
     case SrvQuestion(id, name) =>
       log.debug("Resolving [{}] (SRV)", name)
       val msg = message(name, id, RecordType.SRV)
-      inflightRequests += (id -> (sender(), msg))
+      inflightRequests += (id -> (sender() -> msg))
       log.debug("Message to [{}]: [{}]", ns, msg)
       socket ! Udp.Send(msg.write(), ns)
 

@@ -1,9 +1,10 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.serialization.jackson
 
+import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDateTime
@@ -11,11 +12,38 @@ import java.time.temporal.ChronoUnit
 import java.util.Arrays
 import java.util.Locale
 import java.util.Optional
+import java.util.UUID
 import java.util.logging.FileHandler
 
 import scala.collection.immutable
-import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.duration._
+import scala.concurrent.duration.FiniteDuration
+
+import com.fasterxml.jackson.annotation.JsonSubTypes
+import com.fasterxml.jackson.annotation.JsonTypeInfo
+import com.fasterxml.jackson.core.JsonFactory
+import com.fasterxml.jackson.core.JsonGenerator
+import com.fasterxml.jackson.core.JsonParser
+import com.fasterxml.jackson.core.StreamReadFeature
+import com.fasterxml.jackson.core.StreamWriteFeature
+import com.fasterxml.jackson.core.`type`.TypeReference
+import com.fasterxml.jackson.databind.DeserializationFeature
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.MapperFeature
+import com.fasterxml.jackson.databind.Module
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.SerializationFeature
+import com.fasterxml.jackson.databind.exc.InvalidTypeIdException
+import com.fasterxml.jackson.databind.json.JsonMapper
+import com.fasterxml.jackson.databind.node.IntNode
+import com.fasterxml.jackson.databind.node.ObjectNode
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
+import com.fasterxml.jackson.module.scala.JsonScalaEnumeration
+import com.github.ghik.silencer.silent
+import com.typesafe.config.ConfigFactory
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpecLike
 
 import akka.actor.ActorRef
 import akka.actor.ActorSystem
@@ -29,25 +57,6 @@ import akka.serialization.Serialization
 import akka.serialization.SerializationExtension
 import akka.testkit.TestActors
 import akka.testkit.TestKit
-import com.fasterxml.jackson.annotation.JsonSubTypes
-import com.fasterxml.jackson.annotation.JsonTypeInfo
-import com.fasterxml.jackson.core.JsonFactory
-import com.fasterxml.jackson.databind.MapperFeature
-import com.fasterxml.jackson.databind.DeserializationFeature
-import com.fasterxml.jackson.databind.JsonNode
-import com.fasterxml.jackson.databind.Module
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.databind.SerializationFeature
-import com.fasterxml.jackson.databind.exc.InvalidTypeIdException
-import com.fasterxml.jackson.databind.node.IntNode
-import com.fasterxml.jackson.databind.node.ObjectNode
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
-import com.typesafe.config.ConfigFactory
-import org.scalatest.BeforeAndAfterAll
-import org.scalatest.Matchers
-import org.scalatest.WordSpecLike
-import com.fasterxml.jackson.core.JsonParser
-import com.fasterxml.jackson.core.JsonGenerator
 
 object ScalaTestMessages {
   trait TestMessage
@@ -66,6 +75,7 @@ object ScalaTestMessages {
   final case class BooleanCommand(published: Boolean) extends TestMessage
   final case class TimeCommand(timestamp: LocalDateTime, duration: FiniteDuration) extends TestMessage
   final case class InstantCommand(instant: Instant) extends TestMessage
+  final case class UUIDCommand(uuid: UUID) extends TestMessage
   final case class CollectionsCommand(strings: List[String], objects: Vector[SimpleCommand]) extends TestMessage
   final case class CommandWithActorRef(name: String, replyTo: ActorRef) extends TestMessage
   final case class CommandWithTypedActorRef(name: String, replyTo: akka.actor.typed.ActorRef[String])
@@ -90,6 +100,21 @@ object ScalaTestMessages {
 
   final case class OldCommandNotInBindings(name: String)
 
+  // #jackson-scala-enumeration
+  object Planet extends Enumeration {
+    type Planet = Value
+    val Mercury, Venus, Earth, Mars, Krypton = Value
+  }
+
+  // Uses default Jackson serialization format for Scala Enumerations
+  final case class Alien(name: String, planet: Planet.Planet) extends TestMessage
+
+  // Serializes planet values as a JsonString
+  class PlanetType extends TypeReference[Planet.type] {}
+  final case class Superhero(name: String, @JsonScalaEnumeration(classOf[PlanetType]) planet: Planet.Planet)
+      extends TestMessage
+  // #jackson-scala-enumeration
+
 }
 
 class ScalaTestEventMigration extends JacksonMigration {
@@ -107,8 +132,15 @@ class ScalaTestEventMigration extends JacksonMigration {
   }
 }
 
-class JacksonCborSerializerSpec extends JacksonSerializerSpec("jackson-cbor")
+class JacksonCborSerializerSpec extends JacksonSerializerSpec("jackson-cbor") {
+  "have compression disabled by default" in {
+    val conf = JacksonObjectMapperProvider.configForBinding("jackson-cbor", system.settings.config)
+    val compressionAlgo = conf.getString("compression.algorithm")
+    compressionAlgo should ===("off")
+  }
+}
 
+@silent // this test uses Jackson deprecated APIs
 class JacksonJsonSerializerSpec extends JacksonSerializerSpec("jackson-json") {
 
   def serializeToJsonString(obj: AnyRef, sys: ActorSystem = system): String = {
@@ -161,6 +193,18 @@ class JacksonJsonSerializerSpec extends JacksonSerializerSpec("jackson-json") {
 
           # on is Jackson's default
           json-generator-features.AUTO_CLOSE_TARGET = off
+
+          # off is Jackson's default
+          stream-read-features.STRICT_DUPLICATE_DETECTION = on
+
+          # off is Jackson's default
+          stream-write-features.WRITE_BIGDECIMAL_AS_PLAIN = on
+
+          # off is Jackson's default
+          json-read-features.ALLOW_YAML_COMMENTS = on
+
+          # off is Jackson's default
+          json-write-features.ESCAPE_NON_ASCII = on
         }
       """) { sys =>
         val identifiedObjectMapper =
@@ -174,7 +218,7 @@ class JacksonJsonSerializerSpec extends JacksonSerializerSpec("jackson-json") {
           namedObjectMapper.isEnabled(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS) should ===(false)
 
           // Default mapper follows Jackson and reference.conf default configuration
-          defaultObjectMapper.isEnabled(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS) should ===(true)
+          defaultObjectMapper.isEnabled(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS) should ===(false)
         }
 
         "support deserialization features" in {
@@ -209,14 +253,59 @@ class JacksonJsonSerializerSpec extends JacksonSerializerSpec("jackson-json") {
           defaultObjectMapper.isEnabled(JsonGenerator.Feature.AUTO_CLOSE_TARGET) should ===(true)
         }
 
+        "support stream read features" in {
+          identifiedObjectMapper.isEnabled(StreamReadFeature.STRICT_DUPLICATE_DETECTION) should ===(true)
+          namedObjectMapper.isEnabled(StreamReadFeature.STRICT_DUPLICATE_DETECTION) should ===(true)
+
+          // Default mapper follows Jackson and reference.conf default configuration
+          defaultObjectMapper.isEnabled(StreamReadFeature.STRICT_DUPLICATE_DETECTION) should ===(false)
+        }
+
+        "support stream write features" in {
+          identifiedObjectMapper.isEnabled(StreamWriteFeature.WRITE_BIGDECIMAL_AS_PLAIN) should ===(true)
+          namedObjectMapper.isEnabled(StreamWriteFeature.WRITE_BIGDECIMAL_AS_PLAIN) should ===(true)
+
+          // Default mapper follows Jackson and reference.conf default configuration
+          defaultObjectMapper.isEnabled(StreamWriteFeature.WRITE_BIGDECIMAL_AS_PLAIN) should ===(false)
+        }
+
+        "support json read features" in {
+          // ATTENTION: this is trick. Although we are configuring `json-read-features`, Jackson
+          // does not provides a way to check for `StreamReadFeature`s, so we need to check for
+          // `JsonParser.Feature`.ALLOW_YAML_COMMENTS.
+          // Same applies for json-write-features and JsonGenerator.Feature.
+          identifiedObjectMapper.isEnabled(JsonParser.Feature.ALLOW_YAML_COMMENTS) should ===(true)
+          namedObjectMapper.isEnabled(JsonParser.Feature.ALLOW_YAML_COMMENTS) should ===(true)
+
+          // Default mapper follows Jackson and reference.conf default configuration
+          defaultObjectMapper.isEnabled(JsonParser.Feature.ALLOW_YAML_COMMENTS) should ===(false)
+        }
+
+        "support json write features" in {
+          // ATTENTION: this is trickier than `json-read-features` vs JsonParser.Feature
+          // since the JsonWriteFeature replaces deprecated APIs in JsonGenerator.Feature.
+          // But just like the test for `json-read-features` there is no API to check for
+          // `JsonWriteFeature`s, so we need to use the deprecated APIs.
+          identifiedObjectMapper.isEnabled(JsonGenerator.Feature.ESCAPE_NON_ASCII) should ===(true)
+          namedObjectMapper.isEnabled(JsonGenerator.Feature.ESCAPE_NON_ASCII) should ===(true)
+
+          // Default mapper follows Jackson and reference.conf default configuration
+          defaultObjectMapper.isEnabled(JsonGenerator.Feature.ESCAPE_NON_ASCII) should ===(false)
+        }
+
         "fallback to defaults when object mapper is not configured" in {
           val notConfigured = JacksonObjectMapperProvider(sys).getOrCreate("jackson-not-configured", None)
           // Use Jacksons and Akka defaults
-          notConfigured.isEnabled(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS) should ===(true)
+          notConfigured.isEnabled(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS) should ===(false)
           notConfigured.isEnabled(DeserializationFeature.EAGER_DESERIALIZER_FETCH) should ===(true)
           notConfigured.isEnabled(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY) should ===(false)
           notConfigured.isEnabled(JsonParser.Feature.ALLOW_COMMENTS) should ===(false)
           notConfigured.isEnabled(JsonGenerator.Feature.AUTO_CLOSE_TARGET) should ===(true)
+
+          notConfigured.isEnabled(StreamReadFeature.STRICT_DUPLICATE_DETECTION) should ===(false)
+          notConfigured.isEnabled(StreamWriteFeature.WRITE_BIGDECIMAL_AS_PLAIN) should ===(false)
+          notConfigured.isEnabled(JsonParser.Feature.ALLOW_YAML_COMMENTS) should ===(false)
+          notConfigured.isEnabled(JsonGenerator.Feature.ESCAPE_NON_ASCII) should ===(false)
         }
       }
     }
@@ -253,6 +342,7 @@ class JacksonJsonSerializerSpec extends JacksonSerializerSpec("jackson-json") {
       withSystem("""
         akka.serialization.jackson.serialization-features {
           WRITE_DATES_AS_TIMESTAMPS = on
+          WRITE_DURATIONS_AS_TIMESTAMPS = on
         }
         """) { sys =>
         val msg = new TimeCommand(LocalDateTime.of(2019, 4, 29, 23, 15, 3, 12345), Duration.of(5, ChronoUnit.SECONDS))
@@ -304,9 +394,9 @@ class JacksonJsonSerializerSpec extends JacksonSerializerSpec("jackson-json") {
 
     "be possible to create custom ObjectMapper" in {
       val customJacksonObjectMapperFactory = new JacksonObjectMapperFactory {
-        override def newObjectMapper(bindingName: String, jsonFactory: Option[JsonFactory]): ObjectMapper = {
+        override def newObjectMapper(bindingName: String, jsonFactory: JsonFactory): ObjectMapper = {
           if (bindingName == "jackson-json") {
-            val mapper = new ObjectMapper(jsonFactory.orNull)
+            val mapper: ObjectMapper = JsonMapper.builder(jsonFactory).build()
             // some customer configuration of the mapper
             mapper.setLocale(Locale.US)
             mapper
@@ -354,7 +444,7 @@ class JacksonJsonSerializerSpec extends JacksonSerializerSpec("jackson-json") {
             configuredFeatures: immutable.Seq[(JsonGenerator.Feature, Boolean)])
             : immutable.Seq[(JsonGenerator.Feature, Boolean)] =
           if (bindingName == "jackson-json")
-            configuredFeatures :+ (JsonGenerator.Feature.WRITE_NUMBERS_AS_STRINGS -> true)
+            configuredFeatures :+ (JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN -> true)
           else
             super.overrideConfiguredJsonGeneratorFeatures(bindingName, configuredFeatures)
       }
@@ -370,14 +460,14 @@ class JacksonJsonSerializerSpec extends JacksonSerializerSpec("jackson-json") {
         mapper.isEnabled(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY) should ===(true)
         mapper.isEnabled(JsonParser.Feature.ALLOW_SINGLE_QUOTES) should ===(true)
         mapper.isEnabled(SerializationFeature.INDENT_OUTPUT) should ===(true)
-        mapper.isEnabled(JsonGenerator.Feature.WRITE_NUMBERS_AS_STRINGS) should ===(true)
+        mapper.isEnabled(JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN) should ===(true)
 
         val msg = InstantCommand(Instant.ofEpochMilli(1559907792075L))
         val json = serializeToJsonString(msg, sys)
         // using the custom ObjectMapper with pretty printing enabled, and no JavaTimeModule
         json should include("""  "instant" : {""")
-        json should include("""    "nanos" : "75000000",""")
-        json should include("""    "seconds" : "1559907792"""")
+        json should include("""    "nanos" : 75000000,""")
+        json should include("""    "seconds" : 1559907792""")
       }
     }
 
@@ -390,6 +480,108 @@ class JacksonJsonSerializerSpec extends JacksonSerializerSpec("jackson-json") {
       val expected = OldCommandNotInBindings("abc")
 
       deserializeFromJsonString(json, serializer.identifier, serializer.manifest(expected)) should ===(expected)
+    }
+
+    "deserialize Enumerations as String when configured" in {
+      val json = """{"name":"Superman", "planet":"Krypton"}"""
+
+      val expected = Superhero("Superman", Planet.Krypton)
+      val serializer = serializerFor(expected)
+
+      deserializeFromJsonString(json, serializer.identifier, serializer.manifest(expected)) should ===(expected)
+    }
+
+    "compress large payload with gzip" in {
+      val conf = JacksonObjectMapperProvider.configForBinding("jackson-json", system.settings.config)
+      val compressionAlgo = conf.getString("compression.algorithm")
+      compressionAlgo should ===("gzip")
+      val compressLargerThan = conf.getBytes("compression.compress-larger-than")
+      compressLargerThan should ===(32 * 1024)
+      val msg = SimpleCommand("0" * (compressLargerThan + 1).toInt)
+      val bytes = serializeToBinary(msg)
+      JacksonSerializer.isGZipped(bytes) should ===(true)
+      bytes.length should be < compressLargerThan.toInt
+    }
+
+    "not compress small payload with gzip" in {
+      val msg = SimpleCommand("0" * 1000)
+      val bytes = serializeToBinary(msg)
+      JacksonSerializer.isGZipped(bytes) should ===(false)
+    }
+  }
+
+  "JacksonJsonSerializer without type in manifest" should {
+    import ScalaTestMessages._
+
+    "deserialize messages using the serialization bindings" in withSystem(
+      """
+        akka.actor {
+          serializers.animal = "akka.serialization.jackson.JacksonJsonSerializer"
+          serialization-identifiers.animal = 9091
+          serialization-bindings {
+            "akka.serialization.jackson.ScalaTestMessages$Animal" = animal
+          }
+        }
+        akka.serialization.jackson.animal.type-in-manifest = off
+        """) { sys =>
+      val msg = Elephant("Dumbo", 1)
+      val serializer = serializerFor(msg, sys)
+      serializer.manifest(msg) should ===("")
+      val bytes = serializer.toBinary(msg)
+      val deserialized = serializer.fromBinary(bytes, "")
+      deserialized should ===(msg)
+    }
+
+    "deserialize messages using the configured deserialization type" in withSystem(
+      """
+        akka.actor {
+          serializers.animal = "akka.serialization.jackson.JacksonJsonSerializer"
+          serialization-identifiers.animal = 9091
+          serialization-bindings {
+            "akka.serialization.jackson.ScalaTestMessages$Elephant" = animal
+            "akka.serialization.jackson.ScalaTestMessages$Lion" = animal
+          }
+        }
+        akka.serialization.jackson.animal {
+          type-in-manifest = off
+          deserialization-type = "akka.serialization.jackson.ScalaTestMessages$Animal"
+        }
+      """) { sys =>
+      val msg = Elephant("Dumbo", 1)
+      val serializer = serializerFor(msg, sys)
+      serializer.manifest(msg) should ===("")
+      val bytes = serializer.toBinary(msg)
+      val deserialized = serializer.fromBinary(bytes, "")
+      deserialized should ===(msg)
+    }
+
+    "fail if multiple serialization bindings are declared with no deserialization type" in {
+      an[IllegalArgumentException] should be thrownBy {
+        withSystem("""
+        akka.actor {
+          serializers.animal = "akka.serialization.jackson.JacksonJsonSerializer"
+          serialization-identifiers.animal = 9091
+          serialization-bindings {
+            "akka.serialization.jackson.ScalaTestMessages$Elephant" = animal
+            "akka.serialization.jackson.ScalaTestMessages$Lion" = animal
+          }
+        }
+        akka.serialization.jackson.animal {
+          type-in-manifest = off
+        }
+      """)(sys => checkSerialization(Elephant("Dumbo", 1), sys))
+      }
+    }
+
+    // issue #28918
+    "cbor compatibility for reading json" in {
+      val msg = SimpleCommand("abc")
+      val jsonSerializer = serializerFor(msg)
+      jsonSerializer.identifier should ===(31)
+      val manifest = jsonSerializer.manifest(msg)
+      val bytes = jsonSerializer.toBinary(msg)
+      val deserialized = serialization().deserialize(bytes, 32, manifest).get
+      deserialized should be(msg)
     }
   }
 }
@@ -413,7 +605,7 @@ abstract class JacksonSerializerSpec(serializerName: String)
     }
     akka.serialization.jackson.whitelist-class-prefix = ["akka.serialization.jackson.ScalaTestMessages$$OldCommand"]
     """)))
-    with WordSpecLike
+    with AnyWordSpecLike
     with Matchers
     with BeforeAndAfterAll {
 
@@ -448,6 +640,20 @@ abstract class JacksonSerializerSpec(serializerName: String)
     val manifest = serializer.manifest(obj)
     val serializerId = serializer.identifier
     val blob = serializeToBinary(obj)
+
+    // Issue #28918, check that CBOR format is used (not JSON).
+    if (blob.length > 0) {
+      serializer match {
+        case _: JacksonJsonSerializer =>
+          if (!JacksonSerializer.isGZipped(blob))
+            new String(blob.take(1), StandardCharsets.UTF_8) should ===("{")
+        case _: JacksonCborSerializer =>
+          new String(blob.take(1), StandardCharsets.UTF_8) should !==("{")
+        case _ =>
+          throw new IllegalArgumentException(s"Unexpected serializer $serializer")
+      }
+    }
+
     val deserialized = deserializeFromBinary(blob, serializerId, manifest, sys)
     deserialized should ===(obj)
   }
@@ -569,6 +775,14 @@ abstract class JacksonSerializerSpec(serializerName: String)
       checkSerialization(BooleanCommand(false))
     }
 
+    "serialize message with Enumeration property (using Jackson legacy format)" in {
+      checkSerialization(Alien("E.T.", Planet.Mars))
+    }
+
+    "serialize message with Enumeration property as a String" in {
+      checkSerialization(Superhero("Kal El", Planet.Krypton))
+    }
+
     "serialize message with Optional property" in {
       checkSerialization(OptionCommand(Some("abc")))
       checkSerialization(OptionCommand(None))
@@ -596,6 +810,11 @@ abstract class JacksonSerializerSpec(serializerName: String)
         val deserialized = javaSerializer.fromBinary(blob, javaSerializer.manifest(javaMsg))
         deserialized should ===(javaMsg)
       }
+    }
+
+    "serialize message with UUID property" in {
+      val uuid = UUID.randomUUID()
+      checkSerialization(UUIDCommand(uuid))
     }
 
     "serialize case object" in {

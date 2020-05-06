@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package docs.actor
@@ -18,7 +18,6 @@ import akka.event.Logging
 
 import scala.concurrent.Future
 import akka.actor.{ ActorLogging, ActorRef, ActorSystem, PoisonPill, Terminated }
-import org.scalatest.{ BeforeAndAfterAll, WordSpec }
 import akka.testkit._
 import akka.util._
 import scala.concurrent.duration._
@@ -734,6 +733,23 @@ class ActorDocSpec extends AkkaSpec("""
       (someActor ? "stop").map(_ => Done)
     }
     //#coordinated-shutdown-addTask
+
+    {
+      def cleanup(): Unit = {}
+      import system.dispatcher
+      //#coordinated-shutdown-cancellable
+      val c = CoordinatedShutdown(system).addCancellableTask(CoordinatedShutdown.PhaseBeforeServiceUnbind, "cleanup") {
+        () =>
+          Future {
+            cleanup()
+            Done
+          }
+      }
+
+      // much later...
+      c.cancel()
+      //#coordinated-shutdown-cancellable
+    }
 
     {
       val someActor = system.actorOf(Props(classOf[Replier], this))

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package docs.akka.persistence.typed
@@ -44,7 +44,7 @@ object MovieWatchList {
 
   def behavior(userId: String): Behavior[Command] = {
     EventSourcedBehavior[Command, Event, MovieList](
-      persistenceId = PersistenceId(s"movies-$userId"),
+      persistenceId = PersistenceId("movies", userId),
       emptyState = MovieList(Set.empty),
       commandHandler,
       eventHandler = (state, event) => state.applyEvent(event))

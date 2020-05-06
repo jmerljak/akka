@@ -1,18 +1,19 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster
 
-import language.postfixOps
+import scala.concurrent.duration._
+import scala.concurrent.duration._
 
 import com.typesafe.config.ConfigFactory
+import language.postfixOps
+
 import akka.remote.testkit.MultiNodeConfig
 import akka.remote.testkit.MultiNodeSpec
-import akka.testkit._
-import scala.concurrent.duration._
-import scala.concurrent.duration._
 import akka.remote.transport.ThrottlerTransportAdapter.Direction
+import akka.testkit._
 
 final case class SplitBrainMultiNodeConfig(failureDetectorPuppet: Boolean) extends MultiNodeConfig {
   val first = role("first")
@@ -21,12 +22,16 @@ final case class SplitBrainMultiNodeConfig(failureDetectorPuppet: Boolean) exten
   val fourth = role("fourth")
   val fifth = role("fifth")
 
-  commonConfig(debugConfig(on = false).withFallback(ConfigFactory.parseString("""
+  commonConfig(
+    debugConfig(on = false)
+      .withFallback(ConfigFactory.parseString("""
         akka.remote.retry-gate-closed-for = 3 s
         akka.cluster {
-          auto-down-unreachable-after = 1s
+          downing-provider-class = akka.cluster.testkit.AutoDowning
+          testkit.auto-down-unreachable-after = 1s
           failure-detector.threshold = 4
-        }""")).withFallback(MultiNodeClusterSpec.clusterConfig(failureDetectorPuppet)))
+        }"""))
+      .withFallback(MultiNodeClusterSpec.clusterConfig(failureDetectorPuppet)))
 
   testTransport(on = true)
 }

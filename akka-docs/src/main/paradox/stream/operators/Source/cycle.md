@@ -1,16 +1,13 @@
-# cycle
+# Source.cycle
 
 Stream iterator in cycled manner.
 
 @ref[Source operators](../index.md#source-operators)
 
-@@@div { .group-scala }
-
 ## Signature
 
-@@signature [Source.scala](/akka-stream/src/main/scala/akka/stream/scaladsl/Source.scala) { #cycle }
+@apidoc[Source.cycle](Source$) { scala="#cycle[T](f:()=&gt;Iterator[T]):akka.stream.scaladsl.Source[T,akka.NotUsed]" java="#cycle(akka.japi.function.Creator)" }
 
-@@@
 
 ## Description
 
@@ -18,16 +15,6 @@ Stream iterator in cycled manner. Internally a new iterator is being created to 
 when the original iterator runs out of elements to process it will start all over again from the beginning of the iterator
 provided by the evaluation of provided parameter. If the method argument provides an empty iterator the stream will be 
 terminated with an exception.
-
-
-@@@div { .callout }
-
-**emits** the next value returned from cycled iterator
-
-**completes** never
-
-@@@
-
 
 ## Examples
 
@@ -45,3 +32,13 @@ Scala
 
 Java
 :  @@snip [cycle.java](/akka-stream-tests/src/test/java/akka/stream/javadsl/SourceTest.java) { #cycle-error }
+
+## Reactive Streams semantics
+
+@@@div { .callout }
+
+**emits** the next value returned from cycled iterator
+
+**completes** never
+
+@@@

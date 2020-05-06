@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.persistence.typed.javadsl;
@@ -19,7 +19,7 @@ import com.typesafe.config.ConfigFactory;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
-import org.scalatest.junit.JUnitSuite;
+import org.scalatestplus.junit.JUnitSuite;
 
 import java.time.Duration;
 
@@ -43,7 +43,7 @@ class FailingEventSourcedActor extends EventSourcedBehavior<String, String, Stri
   }
 
   @Override
-  public SignalHandler signalHandler() {
+  public SignalHandler<String> signalHandler() {
     return newSignalHandlerBuilder()
         .onSignal(
             RecoveryCompleted.instance(),
@@ -102,7 +102,10 @@ public class EventSourcedActorFailureTest extends JUnitSuite {
     TestProbe<String> probe = testKit.createTestProbe();
     TestProbe<Throwable> recoveryFailureProbe = testKit.createTestProbe();
     Behavior<String> p1 =
-        fail(new PersistenceId("fail-recovery-once"), probe.ref(), recoveryFailureProbe.ref());
+        fail(
+            PersistenceId.ofUniqueId("fail-recovery-once"),
+            probe.ref(),
+            recoveryFailureProbe.ref());
     testKit.spawn(p1);
     recoveryFailureProbe.expectMessageClass(TestException.class);
   }
@@ -110,7 +113,7 @@ public class EventSourcedActorFailureTest extends JUnitSuite {
   @Test
   public void persistEvents() throws Exception {
     TestProbe<String> probe = testKit.createTestProbe();
-    Behavior<String> p1 = fail(new PersistenceId("fail-first-2"), probe.ref());
+    Behavior<String> p1 = fail(PersistenceId.ofUniqueId("fail-first-2"), probe.ref());
     ActorRef<String> c = testKit.spawn(p1);
     probe.expectMessage("starting");
     // fail

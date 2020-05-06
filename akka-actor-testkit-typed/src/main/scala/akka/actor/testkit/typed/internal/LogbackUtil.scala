@@ -1,12 +1,13 @@
 /*
- * Copyright (C) 2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2019-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.testkit.typed.internal
 
-import akka.annotation.InternalApi
 import org.slf4j.LoggerFactory
 import org.slf4j.event.Level
+
+import akka.annotation.InternalApi
 
 /**
  * INTERNAL API

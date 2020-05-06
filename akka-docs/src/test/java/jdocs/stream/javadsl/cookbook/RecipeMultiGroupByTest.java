@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2015-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package jdocs.stream.javadsl.cookbook;
@@ -101,8 +101,7 @@ public class RecipeMultiGroupByTest extends RecipeTest {
                   // Create a (Msg, Topic) pair for each of the topics
 
                   // the message belongs to
-                  return topicsForMessage
-                      .stream()
+                  return topicsForMessage.stream()
                       .map(topic -> new Pair<Message, Topic>(msg, topic))
                       .collect(toList());
                 });

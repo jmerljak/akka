@@ -4,13 +4,11 @@ Combines elements from each of multiple sources into @scala[tuples] @java[*Pair*
 
 @ref[Fan-in operators](../index.md#fan-in-operators)
 
-@@@div { .group-scala }
-
 ## Signature
 
-@@signature [Flow.scala](/akka-stream/src/main/scala/akka/stream/scaladsl/Flow.scala) { #zipLatest }
+@apidoc[Source.zipLatest](Source) { scala="#zipLatest[U](that:akka.stream.Graph[akka.stream.SourceShape[U],_]):FlowOps.this.Repr[(Out,U)]" java="#zipLatest(akka.stream.Graph)" }
+@apidoc[Flow.zipLatest](Flow) { scala="#zipLatest[U](that:akka.stream.Graph[akka.stream.SourceShape[U],_]):FlowOps.this.Repr[(Out,U)]" java="#zipLatest(akka.stream.Graph)" }
 
-@@@
 
 ## Description
 
@@ -18,6 +16,8 @@ Combines elements from each of multiple sources into @scala[tuples] @java[*Pair*
 
 No element is emitted until at least one element from each Source becomes available.
  
+## Reactive Streams semantics
+
 @@@div { .callout }
 
 **emits** when all of the inputs have at least an element available, and then each time an element becomes

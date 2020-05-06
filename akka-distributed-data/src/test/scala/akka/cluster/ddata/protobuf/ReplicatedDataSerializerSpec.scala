@@ -1,30 +1,31 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster.ddata.protobuf
 
 import java.util.Base64
 
+import com.typesafe.config.ConfigFactory
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpecLike
+
 import akka.actor.ActorIdentity
 import akka.actor.ActorRef
-import org.scalatest.BeforeAndAfterAll
-import org.scalatest.Matchers
-import org.scalatest.WordSpecLike
 import akka.actor.ActorSystem
 import akka.actor.Address
 import akka.actor.ExtendedActorSystem
 import akka.actor.Identify
-import akka.cluster.ddata._
-import akka.cluster.ddata.Replicator.Internal._
-import akka.testkit.TestKit
-import akka.cluster.UniqueAddress
-import akka.remote.RARP
-import com.typesafe.config.ConfigFactory
 import akka.actor.Props
 import akka.actor.RootActorPath
 import akka.cluster.Cluster
+import akka.cluster.UniqueAddress
+import akka.cluster.ddata._
+import akka.cluster.ddata.Replicator.Internal._
+import akka.remote.RARP
 import akka.testkit.TestActors
+import akka.testkit.TestKit
 
 class ReplicatedDataSerializerSpec
     extends TestKit(
@@ -35,11 +36,8 @@ class ReplicatedDataSerializerSpec
     akka.actor.provider=cluster
     akka.remote.classic.netty.tcp.port=0
     akka.remote.artery.canonical.port = 0
-    akka.actor {
-      serialize-messages = off
-    }
     """)))
-    with WordSpecLike
+    with AnyWordSpecLike
     with Matchers
     with BeforeAndAfterAll {
 
@@ -61,7 +59,7 @@ class ReplicatedDataSerializerSpec
 
   /**
    * Given a blob created with the previous serializer (with only string keys for maps). If we deserialize it and then
-   * serialize it again and arive at the same BLOB we can assume that we are compatible in both directions.
+   * serialize it again and arrive at the same BLOB we can assume that we are compatible in both directions.
    */
   def checkCompatibility(oldBlobAsBase64: String, obj: AnyRef): Unit = {
     val oldBlob = Base64.getDecoder.decode(oldBlobAsBase64)

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package docs.actor.typed
@@ -16,18 +16,17 @@ object BlockingFutureActor {
     Behaviors.setup { context =>
       implicit val executionContext: ExecutionContext = context.executionContext
 
-      Behaviors.receiveMessage {
-        case i: Int =>
-          triggerFutureBlockingOperation(i)
-          Behaviors.same
+      Behaviors.receiveMessage { i =>
+        triggerFutureBlockingOperation(i)
+        Behaviors.same
       }
     }
 
-  def triggerFutureBlockingOperation(i: Int)(implicit ec: ExecutionContext) = {
-    println(s"Calling blocking Future: ${i}")
+  def triggerFutureBlockingOperation(i: Int)(implicit ec: ExecutionContext): Future[Unit] = {
+    println(s"Calling blocking Future: $i")
     Future {
       Thread.sleep(5000) //block for 5 seconds
-      println(s"Blocking future finished ${i}")
+      println(s"Blocking future finished $i")
     }
   }
 }
@@ -40,33 +39,29 @@ object SeparateDispatcherFutureActor {
       implicit val executionContext: ExecutionContext =
         context.system.dispatchers.lookup(DispatcherSelector.fromConfig("my-blocking-dispatcher"))
 
-      Behaviors.receiveMessage {
-        case i: Int =>
-          triggerFutureBlockingOperation(i)
-          Behaviors.same
+      Behaviors.receiveMessage { i =>
+        triggerFutureBlockingOperation(i)
+        Behaviors.same
       }
     }
 
-  def triggerFutureBlockingOperation(i: Int)(implicit ec: ExecutionContext) = {
-    println(s"Calling blocking Future: ${i}")
+  def triggerFutureBlockingOperation(i: Int)(implicit ec: ExecutionContext): Future[Unit] = {
+    println(s"Calling blocking Future: $i")
     Future {
       Thread.sleep(5000) //block for 5 seconds
-      println(s"Blocking future finished ${i}")
+      println(s"Blocking future finished $i")
     }
   }
 }
 // #separate-dispatcher
 
 object BlockingDispatcherSample {
-  def main(args: Array[String]) = {
+  def main(args: Array[String]): Unit = {
     // #blocking-main
     val root = Behaviors.setup[Nothing] { context =>
-      val actor1 = context.spawn(BlockingFutureActor(), "futureActor")
-      val actor2 = context.spawn(PrintActor.behavior, "printActor")
-
       for (i <- 1 to 100) {
-        actor1 ! i
-        actor2 ! i
+        context.spawn(BlockingFutureActor(), s"futureActor-$i") ! i
+        context.spawn(PrintActor(), s"printActor-$i") ! i
       }
       Behaviors.empty
     }
@@ -76,7 +71,7 @@ object BlockingDispatcherSample {
 }
 
 object SeparateDispatcherSample {
-  def main(args: Array[String]) = {
+  def main(args: Array[String]): Unit = {
 
     val config = ConfigFactory.parseString("""
       //#my-blocking-dispatcher-config
@@ -93,12 +88,9 @@ object SeparateDispatcherSample {
 
     // #separate-dispatcher-main
     val root = Behaviors.setup[Nothing] { context =>
-      val actor1 = context.spawn(SeparateDispatcherFutureActor(), "futureActor")
-      val actor2 = context.spawn(PrintActor.behavior, "printActor")
-
       for (i <- 1 to 100) {
-        actor1 ! i
-        actor2 ! i
+        context.spawn(SeparateDispatcherFutureActor(), s"futureActor-$i") ! i
+        context.spawn(PrintActor(), s"printActor-$i") ! i
       }
       Behaviors.ignore
     }

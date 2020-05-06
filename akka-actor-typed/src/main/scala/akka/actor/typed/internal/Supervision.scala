@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed
@@ -13,6 +13,8 @@ import scala.reflect.ClassTag
 import scala.util.control.Exception.Catcher
 import scala.util.control.NonFatal
 
+import org.slf4j.event.Level
+
 import akka.actor.DeadLetterSuppression
 import akka.actor.Dropped
 import akka.actor.typed.BehaviorInterceptor.PreStartTarget
@@ -25,13 +27,18 @@ import akka.annotation.InternalApi
 import akka.event.Logging
 import akka.util.OptionVal
 import akka.util.unused
-import org.slf4j.event.Level
 
 /**
  * INTERNAL API
  */
 @InternalApi private[akka] object Supervisor {
   def apply[T, Thr <: Throwable: ClassTag](initialBehavior: Behavior[T], strategy: SupervisorStrategy): Behavior[T] = {
+    if (initialBehavior.isInstanceOf[scaladsl.AbstractBehavior[_]] || initialBehavior
+          .isInstanceOf[javadsl.AbstractBehavior[_]]) {
+      throw new IllegalArgumentException(
+        "The supervised Behavior must not be a AbstractBehavior instance directly," +
+        "because a different instance should be created when it is restarted. Wrap in Behaviors.setup.")
+    }
 
     strategy match {
       case r: RestartOrBackoff =>
@@ -189,7 +196,7 @@ private class RestartSupervisor[T, Thr <: Throwable: ClassTag](initial: Behavior
 
   private def deadlineHasTimeLeft: Boolean = deadline match {
     case OptionVal.None    => true
-    case OptionVal.Some(d) => d.hasTimeLeft
+    case OptionVal.Some(d) => d.hasTimeLeft()
   }
 
   override def aroundSignal(ctx: TypedActorContext[Any], signal: Signal, target: SignalTarget[T]): Behavior[T] = {

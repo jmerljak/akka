@@ -1,13 +1,14 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor
 
-import akka.util.JavaDurationConverters._
 import scala.concurrent.duration.FiniteDuration
+
 import akka.annotation.DoNotInherit
 import akka.dispatch.Envelope
+import akka.util.JavaDurationConverters._
 import akka.util.OptionVal
 
 /**
@@ -97,9 +98,9 @@ abstract class AbstractActorWithTimers extends AbstractActor with Timers {
    * the reciprocal of the specified `delay`.
    *
    * Each timer has a key and if a new timer with same key is started
-   * the previous is cancelled and it's guaranteed that a message from the
-   * previous timer is not received, even though it might already be enqueued
-   * in the mailbox when the new timer is started.
+   * the previous is cancelled. It is guaranteed that a message from the
+   * previous timer is not received, even if it was already enqueued
+   * in the mailbox when the new timer was started.
    */
   def startTimerWithFixedDelay(key: Any, msg: Any, delay: FiniteDuration): Unit
 
@@ -115,9 +116,9 @@ abstract class AbstractActorWithTimers extends AbstractActor with Timers {
    * the reciprocal of the specified `delay`.
    *
    * Each timer has a key and if a new timer with same key is started
-   * the previous is cancelled and it's guaranteed that a message from the
-   * previous timer is not received, even though it might already be enqueued
-   * in the mailbox when the new timer is started.
+   * the previous is cancelled. It is guaranteed that a message from the
+   * previous timer is not received, even if it was already enqueued
+   * in the mailbox when the new timer was started.
    */
   final def startTimerWithFixedDelay(key: Any, msg: Any, delay: java.time.Duration): Unit =
     startTimerWithFixedDelay(key, msg, delay.asScala)
@@ -143,9 +144,9 @@ abstract class AbstractActorWithTimers extends AbstractActor with Timers {
    * Therefore `startTimerWithFixedDelay` is often preferred.
    *
    * Each timer has a key and if a new timer with same key is started
-   * the previous is cancelled and it's guaranteed that a message from the
-   * previous timer is not received, even though it might already be enqueued
-   * in the mailbox when the new timer is started.
+   * the previous is cancelled. It is guaranteed that a message from the
+   * previous timer is not received, even if it was already enqueued
+   * in the mailbox when the new timer was started.
    */
   def startTimerAtFixedRate(key: Any, msg: Any, interval: FiniteDuration): Unit
 
@@ -170,9 +171,9 @@ abstract class AbstractActorWithTimers extends AbstractActor with Timers {
    * Therefore `startTimerWithFixedDelay` is often preferred.
    *
    * Each timer has a key and if a new timer with same key is started
-   * the previous is cancelled and it's guaranteed that a message from the
-   * previous timer is not received, even though it might already be enqueued
-   * in the mailbox when the new timer is started.
+   * the previous is cancelled. It is guaranteed that a message from the
+   * previous timer is not received, even if it was already enqueued
+   * in the mailbox when the new timer was started.
    */
   final def startTimerAtFixedRate(key: Any, msg: Any, interval: java.time.Duration): Unit =
     startTimerAtFixedRate(key, msg, interval.asScala)
@@ -201,9 +202,9 @@ abstract class AbstractActorWithTimers extends AbstractActor with Timers {
    * the given `timeout`.
    *
    * Each timer has a key and if a new timer with same key is started
-   * the previous is cancelled and it's guaranteed that a message from the
-   * previous timer is not received, even though it might already be enqueued
-   * in the mailbox when the new timer is started.
+   * the previous is cancelled. It is guaranteed that a message from the
+   * previous timer is not received, even if it was already enqueued
+   * in the mailbox when the new timer was started.
    */
   def startSingleTimer(key: Any, msg: Any, timeout: FiniteDuration): Unit
 
@@ -212,9 +213,9 @@ abstract class AbstractActorWithTimers extends AbstractActor with Timers {
    * the given `timeout`.
    *
    * Each timer has a key and if a new timer with same key is started
-   * the previous is cancelled and it's guaranteed that a message from the
-   * previous timer is not received, even though it might already be enqueued
-   * in the mailbox when the new timer is started.
+   * the previous is cancelled. It is guaranteed that a message from the
+   * previous timer is not received, even if it was already enqueued
+   * in the mailbox when the new timer was started.
    */
   final def startSingleTimer(key: Any, msg: Any, timeout: java.time.Duration): Unit =
     startSingleTimer(key, msg, timeout.asScala)

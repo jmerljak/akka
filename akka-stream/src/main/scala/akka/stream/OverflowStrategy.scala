@@ -1,10 +1,11 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream
 
 import OverflowStrategies._
+
 import akka.annotation.{ DoNotInherit, InternalApi }
 import akka.event.Logging
 import akka.event.Logging.LogLevel
@@ -88,7 +89,7 @@ private[akka] object OverflowStrategies {
    * INTERNAL API
    */
   private[akka] case object EmitEarly extends DelayOverflowStrategy {
-    private[akka] override def isBackpressure: Boolean = false
+    private[akka] override def isBackpressure: Boolean = true
   }
 }
 
@@ -132,6 +133,7 @@ object DelayOverflowStrategy {
 
   /**
    * If the buffer is full when a new element is available this strategy send next element downstream without waiting
+   * Will backpressure if downstream is not ready.
    */
   def emitEarly: DelayOverflowStrategy = EmitEarly
 

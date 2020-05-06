@@ -1,14 +1,14 @@
 /*
- * Copyright (C) 2014-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2014-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream.impl
 
+import scala.annotation.switch
+
 import akka.annotation.InternalApi
 import akka.stream.scaladsl.Framing.FramingException
 import akka.util.ByteString
-
-import scala.annotation.switch
 
 /**
  * INTERNAL API: Use [[akka.stream.scaladsl.JsonFraming]] instead.
@@ -116,7 +116,8 @@ import scala.annotation.switch
       trimFront += 1
     } else if (input == SquareBraceEnd && outsideObject) {
       // outer array completed!
-      pos = -1
+      pos += 1
+      trimFront += 1
     } else if (input == Comma && outsideObject) {
       // do nothing
       pos += 1
@@ -137,9 +138,7 @@ import scala.annotation.switch
       isStartOfEscapeSequence = false
       depth -= 1
       pos += 1
-      if (depth == 0) {
-        completedObject = true
-      }
+      if (depth == 0) completedObject = true
     } else if (isWhitespace(input) && !inStringExpression) {
       pos += 1
       if (depth == 0) trimFront += 1

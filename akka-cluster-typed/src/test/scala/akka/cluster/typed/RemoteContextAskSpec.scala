@@ -1,63 +1,33 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster.typed
 
-import java.nio.charset.StandardCharsets
-
-import akka.actor.ExtendedActorSystem
-import akka.actor.typed.receptionist.Receptionist.Registered
-import akka.actor.typed.receptionist.{ Receptionist, ServiceKey }
-import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.{ ActorRef, ActorRefResolver, ActorSystem }
-import akka.serialization.SerializerWithStringManifest
-import akka.actor.testkit.typed.scaladsl.TestProbe
-import akka.actor.typed.scaladsl.adapter._
-import akka.util.Timeout
-import com.typesafe.config.ConfigFactory
 import scala.concurrent.duration._
-import scala.util.{ Failure, Success }
+import scala.util.Failure
+import scala.util.Success
 
-import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import com.typesafe.config.ConfigFactory
+import org.scalatest.wordspec.AnyWordSpecLike
+
 import akka.actor.testkit.typed.scaladsl.LogCapturing
-import org.scalatest.WordSpecLike
-
-class RemoteContextAskSpecSerializer(system: ExtendedActorSystem) extends SerializerWithStringManifest {
-  override def identifier = 41
-  override def manifest(o: AnyRef) = o match {
-    case _: RemoteContextAskSpec.Ping => "a"
-    case RemoteContextAskSpec.Pong    => "b"
-  }
-  override def toBinary(o: AnyRef) = o match {
-    case RemoteContextAskSpec.Ping(who) =>
-      ActorRefResolver(system.toTyped).toSerializationFormat(who).getBytes(StandardCharsets.UTF_8)
-    case RemoteContextAskSpec.Pong => Array.emptyByteArray
-  }
-  override def fromBinary(bytes: Array[Byte], manifest: String) = manifest match {
-    case "a" =>
-      val str = new String(bytes, StandardCharsets.UTF_8)
-      val ref = ActorRefResolver(system.toTyped).resolveActorRef[RemoteContextAskSpec.Pong.type](str)
-      RemoteContextAskSpec.Ping(ref)
-    case "b" => RemoteContextAskSpec.Pong
-  }
-}
+import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
+import akka.actor.testkit.typed.scaladsl.TestProbe
+import akka.actor.typed.ActorRef
+import akka.actor.typed.ActorSystem
+import akka.actor.typed.receptionist.Receptionist
+import akka.actor.typed.receptionist.Receptionist.Registered
+import akka.actor.typed.receptionist.ServiceKey
+import akka.actor.typed.scaladsl.Behaviors
+import akka.serialization.jackson.CborSerializable
+import akka.util.Timeout
 
 object RemoteContextAskSpec {
   def config = ConfigFactory.parseString(s"""
     akka {
       loglevel = debug
-      actor {
-        provider = cluster
-        serialize-creators = off
-        serializers {
-          test = "akka.cluster.typed.RemoteContextAskSpecSerializer"
-        }
-        serialization-bindings {
-          "akka.cluster.typed.RemoteContextAskSpec$$Ping" = test
-          "akka.cluster.typed.RemoteContextAskSpec$$Pong$$" = test
-        }
-      }
+      actor.provider = cluster
       remote.classic.netty.tcp.port = 0
       remote.classic.netty.tcp.host = 127.0.0.1
       remote.artery {
@@ -69,8 +39,8 @@ object RemoteContextAskSpec {
     }
   """)
 
-  case object Pong
-  case class Ping(respondTo: ActorRef[Pong.type])
+  case object Pong extends CborSerializable
+  case class Ping(respondTo: ActorRef[Pong.type]) extends CborSerializable
 
   def pingPong = Behaviors.receive[Ping] { (_, msg) =>
     msg match {
@@ -86,7 +56,7 @@ object RemoteContextAskSpec {
 
 class RemoteContextAskSpec
     extends ScalaTestWithActorTestKit(RemoteContextAskSpec.config)
-    with WordSpecLike
+    with AnyWordSpecLike
     with LogCapturing {
 
   import RemoteContextAskSpec._

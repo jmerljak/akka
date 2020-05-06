@@ -1,19 +1,19 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote
 
-import language.postfixOps
-
-import akka.testkit.AkkaSpec
 import scala.concurrent.duration._
 
+import com.github.ghik.silencer.silent
+import language.postfixOps
+
 import akka.remote.transport.AkkaProtocolSettings
+import akka.remote.transport.netty.{ NettyTransportSettings, SSLSettings }
+import akka.testkit.AkkaSpec
 import akka.util.Helpers
 import akka.util.Helpers.ConfigOps
-import akka.remote.transport.netty.{ NettyTransportSettings, SSLSettings }
-import com.github.ghik.silencer.silent
 
 @silent // classic deprecated
 class RemoteConfigSpec extends AkkaSpec("""
@@ -69,9 +69,6 @@ class RemoteConfigSpec extends AkkaSpec("""
     "be able to parse AkkaProtocol related config elements" in {
       val settings = new AkkaProtocolSettings(RARP(system).provider.remoteSettings.config)
       import settings._
-
-      RequireCookie should ===(false)
-      SecureCookie should ===(None)
 
       TransportFailureDetectorImplementationClass should ===(classOf[DeadlineFailureDetector].getName)
       TransportHeartBeatInterval should ===(4.seconds)

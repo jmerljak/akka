@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package jdocs.akka.cluster.sharding.typed;
@@ -20,11 +20,22 @@ import akka.cluster.sharding.typed.javadsl.ClusterSharding;
 import akka.cluster.sharding.typed.javadsl.EntityTypeKey;
 import akka.cluster.sharding.typed.javadsl.EntityRef;
 import akka.cluster.sharding.typed.javadsl.Entity;
+import akka.persistence.typed.PersistenceId;
 
 // #import
 
-import jdocs.akka.persistence.typed.BlogPostExample.BlogCommand;
-import jdocs.akka.persistence.typed.BlogPostExample.BlogBehavior;
+// #get-shard-region-state
+import akka.cluster.sharding.typed.GetShardRegionState;
+import akka.cluster.sharding.ShardRegion.CurrentShardRegionState;
+
+// #get-shard-region-state
+// #get-cluster-sharding-stats
+import akka.cluster.sharding.typed.GetClusterShardingStats;
+import akka.cluster.sharding.ShardRegion.ClusterShardingStats;
+
+// #get-cluster-sharding-stats
+
+import jdocs.akka.persistence.typed.BlogPostEntity;
 
 interface ShardingCompileOnlyTest {
 
@@ -49,12 +60,11 @@ interface ShardingCompileOnlyTest {
       return Behaviors.setup(context -> new Counter(context, entityId));
     }
 
-    private final ActorContext<Command> context;
     private final String entityId;
     private int value = 0;
 
     private Counter(ActorContext<Command> context, String entityId) {
-      this.context = context;
+      super(context);
       this.entityId = entityId;
     }
 
@@ -112,7 +122,6 @@ interface ShardingCompileOnlyTest {
           });
     }
 
-    private final ActorContext<Command> context;
     private final ActorRef<ClusterSharding.ShardCommand> shard;
     private final String entityId;
     private int value = 0;
@@ -121,7 +130,7 @@ interface ShardingCompileOnlyTest {
         ActorContext<Command> context,
         ActorRef<ClusterSharding.ShardCommand> shard,
         String entityId) {
-      this.context = context;
+      super(context);
       this.shard = shard;
       this.entityId = entityId;
     }
@@ -148,7 +157,7 @@ interface ShardingCompileOnlyTest {
 
     private Behavior<Command> onIdle() {
       // after receive timeout
-      shard.tell(new ClusterSharding.Passivate<>(context.getSelf()));
+      shard.tell(new ClusterSharding.Passivate<>(getContext().getSelf()));
       return this;
     }
 
@@ -197,14 +206,84 @@ interface ShardingCompileOnlyTest {
     // #send
   }
 
+  public static void roleExample() {
+    ActorSystem system = ActorSystem.create(Behaviors.empty(), "ShardingExample");
+    ClusterSharding sharding = ClusterSharding.get(system);
+
+    // #roles
+    EntityTypeKey<Counter.Command> typeKey = EntityTypeKey.create(Counter.Command.class, "Counter");
+
+    ActorRef<ShardingEnvelope<Counter.Command>> shardRegionOrProxy =
+        sharding.init(
+            Entity.of(typeKey, ctx -> Counter.create(ctx.getEntityId())).withRole("backend"));
+    // #roles
+  }
+
   public static void persistenceExample() {
     ActorSystem system = ActorSystem.create(Behaviors.empty(), "ShardingExample");
     ClusterSharding sharding = ClusterSharding.get(system);
 
     // #persistence
-    EntityTypeKey<BlogCommand> blogTypeKey = EntityTypeKey.create(BlogCommand.class, "BlogPost");
+    EntityTypeKey<BlogPostEntity.Command> blogTypeKey =
+        EntityTypeKey.create(BlogPostEntity.Command.class, "BlogPost");
 
-    sharding.init(Entity.of(blogTypeKey, ctx -> BlogBehavior.behavior(ctx.getEntityId())));
+    sharding.init(
+        Entity.of(
+            blogTypeKey,
+            entityContext ->
+                BlogPostEntity.create(
+                    entityContext.getEntityId(),
+                    PersistenceId.of(
+                        entityContext.getEntityTypeKey().name(), entityContext.getEntityId()))));
     // #persistence
+  }
+
+  public static void dataCenterExample() {
+    ActorSystem system = ActorSystem.create(Behaviors.empty(), "ShardingExample");
+    EntityTypeKey<Counter.Command> typeKey = EntityTypeKey.create(Counter.Command.class, "Counter");
+    String entityId = "a";
+
+    // #proxy-dc
+    ActorRef<ShardingEnvelope<Counter.Command>> proxy =
+        ClusterSharding.get(system)
+            .init(
+                Entity.of(typeKey, ctx -> Counter.create(ctx.getEntityId())).withDataCenter("dc2"));
+    // #proxy-dc
+
+    // #proxy-dc-entityref
+    // it must still be started before usage
+    ClusterSharding.get(system)
+        .init(Entity.of(typeKey, ctx -> Counter.create(ctx.getEntityId())).withDataCenter("dc2"));
+
+    EntityRef<Counter.Command> entityRef =
+        ClusterSharding.get(system).entityRefFor(typeKey, entityId, "dc2");
+    // #proxy-dc-entityref
+  }
+
+  public static void shardRegionQqueryExample() {
+    ActorSystem system = ActorSystem.create(Behaviors.empty(), "ShardingExample");
+    ActorRef<CurrentShardRegionState> replyMessageAdapter = null;
+    EntityTypeKey<Counter.Command> typeKey = EntityTypeKey.create(Counter.Command.class, "Counter");
+
+    // #get-shard-region-state
+    ActorRef<CurrentShardRegionState> replyTo = replyMessageAdapter;
+
+    ClusterSharding.get(system).shardState().tell(new GetShardRegionState(typeKey, replyTo));
+    // #get-shard-region-state
+  }
+
+  public static void shardingStatsQqueryExample() {
+    ActorSystem system = ActorSystem.create(Behaviors.empty(), "ShardingExample");
+    ActorRef<ClusterShardingStats> replyMessageAdapter = null;
+    EntityTypeKey<Counter.Command> typeKey = EntityTypeKey.create(Counter.Command.class, "Counter");
+
+    // #get-cluster-sharding-stats
+    ActorRef<ClusterShardingStats> replyTo = replyMessageAdapter;
+    Duration timeout = Duration.ofSeconds(5);
+
+    ClusterSharding.get(system)
+        .shardState()
+        .tell(new GetClusterShardingStats(typeKey, timeout, replyTo));
+    // #get-cluster-sharding-stats
   }
 }

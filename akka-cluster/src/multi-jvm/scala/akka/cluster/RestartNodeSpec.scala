@@ -1,11 +1,13 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster
 
 import scala.collection.immutable
 import scala.concurrent.duration._
+
+import com.typesafe.config.ConfigFactory
 
 import akka.Done
 import akka.actor.Actor
@@ -22,7 +24,6 @@ import akka.cluster.MemberStatus._
 import akka.remote.testkit.MultiNodeConfig
 import akka.remote.testkit.MultiNodeSpec
 import akka.testkit._
-import com.typesafe.config.ConfigFactory
 import akka.util.ccompat._
 
 @ccompatUsedUntil213
@@ -34,7 +35,8 @@ object RestartNodeMultiJvmSpec extends MultiNodeConfig {
   commonConfig(
     debugConfig(on = false)
       .withFallback(ConfigFactory.parseString("""
-      akka.cluster.auto-down-unreachable-after = 5s
+      akka.cluster.downing-provider-class = akka.cluster.testkit.AutoDowning
+      akka.cluster.testkit.auto-down-unreachable-after = 5s
       akka.cluster.allow-weakly-up-members = off
       #akka.remote.use-passive-connections = off
       # test is using Java serialization and not priority to rewrite

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote.artery
@@ -13,6 +13,7 @@ import scala.concurrent.Await
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
 import scala.concurrent.Promise
+import scala.concurrent.duration.Duration
 import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
@@ -25,11 +26,13 @@ import akka.actor.ExtendedActorSystem
 import akka.dispatch.ExecutionContexts
 import akka.event.Logging
 import akka.remote.RemoteActorRefProvider
+import akka.remote.RemoteLogMarker
 import akka.remote.RemoteTransportException
 import akka.remote.artery.Decoder.InboundCompressionAccess
 import akka.remote.artery.compress._
 import akka.stream.Attributes
 import akka.stream.Attributes.LogLevels
+import akka.stream.IgnoreComplete
 import akka.stream.KillSwitches
 import akka.stream.Materializer
 import akka.stream.SharedKillSwitch
@@ -69,9 +72,8 @@ private[remote] class ArteryTcpTransport(
     _provider: RemoteActorRefProvider,
     tlsEnabled: Boolean)
     extends ArteryTransport(_system, _provider) {
-  import ArteryTransport._
   import ArteryTcpTransport._
-  import FlightRecorderEvents._
+  import ArteryTransport._
 
   override type LifeCycle = NotUsed
 
@@ -115,48 +117,78 @@ private[remote] class ArteryTcpTransport(
       bufferPool: EnvelopeBufferPool): Sink[EnvelopeBuffer, Future[Done]] = {
     implicit val sys: ActorSystem = system
 
-    val afr = IgnoreEventSink
-
     val host = outboundContext.remoteAddress.host.get
     val port = outboundContext.remoteAddress.port.get
     val remoteAddress = InetSocketAddress.createUnresolved(host, port)
 
-    def connectionFlow: Flow[ByteString, ByteString, Future[Tcp.OutgoingConnection]] =
+    def connectionFlow: Flow[ByteString, ByteString, Future[Tcp.OutgoingConnection]] = {
+      val localAddress = settings.Advanced.Tcp.OutboundClientHostname match {
+        case None                 => None
+        case Some(clientHostname) => Some(new InetSocketAddress(clientHostname, 0))
+      }
       if (tlsEnabled) {
         val sslProvider = sslEngineProvider.get
-        Tcp().outgoingTlsConnectionWithSSLEngine(
+        Tcp().outgoingConnectionWithTls(
           remoteAddress,
           createSSLEngine = () => sslProvider.createClientSSLEngine(host, port),
+          localAddress,
+          options = Nil,
           connectTimeout = settings.Advanced.Tcp.ConnectionTimeout,
-          verifySession = session => optionToTry(sslProvider.verifyClientSession(host, session)))
+          idleTimeout = Duration.Inf,
+          verifySession = session => optionToTry(sslProvider.verifyClientSession(host, session)),
+          closing = IgnoreComplete)
       } else {
         Tcp().outgoingConnection(
           remoteAddress,
+          localAddress,
           halfClose = true, // issue https://github.com/akka/akka/issues/24392 if set to false
           connectTimeout = settings.Advanced.Tcp.ConnectionTimeout)
       }
+    }
 
     def connectionFlowWithRestart: Flow[ByteString, ByteString, NotUsed] = {
       val restartCount = new AtomicInteger(0)
+
+      def logConnect(): Unit = {
+        if (log.isDebugEnabled)
+          log.debug(
+            RemoteLogMarker.connect(
+              outboundContext.remoteAddress,
+              outboundContext.associationState.uniqueRemoteAddress().map(_.uid)),
+            "Outbound connection opened to [{}]",
+            outboundContext.remoteAddress)
+      }
+
+      def logDisconnected(): Unit = {
+        if (log.isDebugEnabled)
+          log.debug(
+            RemoteLogMarker.disconnected(
+              outboundContext.remoteAddress,
+              outboundContext.associationState.uniqueRemoteAddress().map(_.uid)),
+            "Outbound connection closed to [{}]",
+            outboundContext.remoteAddress)
+      }
 
       val flowFactory = () => {
         val onFailureLogLevel = if (restartCount.incrementAndGet() == 1) Logging.WarningLevel else Logging.DebugLevel
 
         def flow(controlIdleKillSwitch: OptionVal[SharedKillSwitch]) =
           Flow[ByteString]
-            .via(Flow.lazyInitAsync(() => {
+            .via(Flow.lazyFlow(() => {
               // only open the actual connection if any new messages are sent
-              afr.loFreq(
-                TcpOutbound_Connected,
-                s"${outboundContext.remoteAddress.host.get}:${outboundContext.remoteAddress.port.get} " +
-                s"/ ${streamName(streamId)}")
+              logConnect()
+              flightRecorder.tcpOutboundConnected(outboundContext.remoteAddress, streamName(streamId))
               if (controlIdleKillSwitch.isDefined)
                 outboundContext.asInstanceOf[Association].setControlIdleKillSwitch(controlIdleKillSwitch)
-              Future.successful(
-                Flow[ByteString]
-                  .prepend(Source.single(TcpFraming.encodeConnectionHeader(streamId)))
-                  .via(connectionFlow))
+
+              Flow[ByteString].prepend(Source.single(TcpFraming.encodeConnectionHeader(streamId))).via(connectionFlow)
             }))
+            .mapError {
+              case ArteryTransport.ShutdownSignal => ArteryTransport.ShutdownSignal
+              case e =>
+                logDisconnected()
+                e
+            }
             .recoverWithRetries(1, { case ArteryTransport.ShutdownSignal => Source.empty })
             .log(name = s"outbound connection to [${outboundContext.remoteAddress}], ${streamName(streamId)} stream")
             .addAttributes(Attributes.logLevels(onElement = LogLevels.Off, onFailure = onFailureLogLevel))
@@ -188,7 +220,7 @@ private[remote] class ArteryTcpTransport(
     Flow[EnvelopeBuffer]
       .map { env =>
         val size = env.byteBuffer.limit()
-        afr.hiFreq(TcpOutbound_Sent, size)
+        flightRecorder.tcpOutboundSent(size)
 
         // TODO Possible performance improvement, could we reduce the copying of bytes?
         val bytes = ByteString(env.byteBuffer)
@@ -213,23 +245,24 @@ private[remote] class ArteryTcpTransport(
     val connectionSource: Source[Tcp.IncomingConnection, Future[ServerBinding]] =
       if (tlsEnabled) {
         val sslProvider = sslEngineProvider.get
-        Tcp().bindTlsWithSSLEngine(
+        Tcp().bindWithTls(
           interface = bindHost,
           port = bindPort,
           createSSLEngine = () => sslProvider.createServerSSLEngine(bindHost, bindPort),
-          verifySession = session => optionToTry(sslProvider.verifyServerSession(bindHost, session)))
+          backlog = Tcp.defaultBacklog,
+          options = Nil,
+          idleTimeout = Duration.Inf,
+          verifySession = session => optionToTry(sslProvider.verifyServerSession(bindHost, session)),
+          closing = IgnoreComplete)
       } else {
         Tcp().bind(interface = bindHost, port = bindPort, halfClose = false)
       }
 
     val binding = serverBinding match {
       case None =>
-        val afr = IgnoreEventSink
         val binding = connectionSource
           .to(Sink.foreach { connection =>
-            afr.loFreq(
-              TcpInbound_Connected,
-              s"${connection.remoteAddress.getHostString}:${connection.remoteAddress.getPort}")
+            flightRecorder.tcpInboundConnected(connection.remoteAddress)
             inboundConnectionFlow.map(connection.handleWith(_))(sys.dispatcher)
           })
           .run()
@@ -240,11 +273,11 @@ private[remote] class ArteryTcpTransport(
                   s"Failed to bind TCP to [$bindHost:$bindPort] due to: " +
                   e.getMessage,
                   e))
-          }(ExecutionContexts.sameThreadExecutionContext)
+          }(ExecutionContexts.parasitic)
 
         // only on initial startup, when ActorSystem is starting
         val b = Await.result(binding, settings.Bind.BindTimeout)
-        afr.loFreq(TcpInbound_Bound, s"$bindHost:${b.localAddress.getPort}")
+        flightRecorder.tcpInboundBound(bindHost, b.localAddress)
         b
       case Some(binding) =>
         // already bound, when restarting
@@ -315,7 +348,7 @@ private[remote] class ArteryTcpTransport(
       Flow[ByteString]
         .via(inboundKillSwitch.flow)
         // must create new FlightRecorder event sink for each connection because they can't be shared
-        .via(new TcpFraming)
+        .via(new TcpFraming(flightRecorder))
         .alsoTo(inboundStream)
         .filter(_ => false) // don't send back anything in this TCP socket
         .map(_ => ByteString.empty) // make it a Flow[ByteString] again
@@ -454,7 +487,7 @@ private[remote] class ArteryTcpTransport(
     implicit val ec = system.dispatchers.internalDispatcher
     inboundKillSwitch.shutdown()
     unbind().map { _ =>
-      topLevelFlightRecorder.loFreq(Transport_Stopped, NoMetaData)
+      flightRecorder.transportStopped()
       Done
     }
   }
@@ -466,9 +499,7 @@ private[remote] class ArteryTcpTransport(
         for {
           _ <- binding.unbind()
         } yield {
-          topLevelFlightRecorder.loFreq(
-            TcpInbound_Bound,
-            s"${localAddress.address.host.get}:${localAddress.address.port}")
+          flightRecorder.tcpInboundUnbound(localAddress)
           Done
         }
       case None =>

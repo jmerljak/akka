@@ -4,11 +4,10 @@ Create a sink which materializes into an `InputStream` that can be read to trigg
 
 @ref[Additional Sink and Source converters](../index.md#additional-sink-and-source-converters)
 
-@@@ div { .group-scala }
 ## Signature
 
-@@signature [StreamConverters.scala](/akka-stream/src/main/scala/akka/stream/scaladsl/StreamConverters.scala) { #asInputStream }
-@@@
+@apidoc[StreamConverters.asInputStream](StreamConverters$) { scala="#asInputStream(readTimeout:scala.concurrent.duration.FiniteDuration):akka.stream.scaladsl.Sink[akka.util.ByteString,java.io.InputStream]" java="#asInputStream()" }
+
 
 ## Description
 
@@ -17,6 +16,8 @@ Bytes emitted through the stream will be available for reading through the `Inpu
 
 The `InputStream` will be ended when the stream flowing into this `Sink` completes, and the closing the
 `InputStream` will cancel the inflow of this `Sink`.
+
+## Reactive Streams semantics
 
 @@@div { .callout }
 **cancels** when the `InputStream` is closed

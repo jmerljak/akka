@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package jdocs.typed.tutorial_1;
@@ -8,7 +8,7 @@ import akka.actor.typed.PreRestart;
 import akka.actor.typed.SupervisorStrategy;
 import org.junit.ClassRule;
 import org.junit.Test;
-import org.scalatest.junit.JUnitSuite;
+import org.scalatestplus.junit.JUnitSuite;
 
 import akka.actor.testkit.typed.javadsl.TestKitJunitResource;
 import akka.actor.typed.PostStop;
@@ -28,10 +28,8 @@ class PrintMyActorRefActor extends AbstractBehavior<String> {
     return Behaviors.setup(PrintMyActorRefActor::new);
   }
 
-  private final ActorContext<String> context;
-
   private PrintMyActorRefActor(ActorContext<String> context) {
-    this.context = context;
+    super(context);
   }
 
   @Override
@@ -40,7 +38,7 @@ class PrintMyActorRefActor extends AbstractBehavior<String> {
   }
 
   private Behavior<String> printIt() {
-    ActorRef<String> secondRef = context.spawn(Behaviors.empty(), "second-actor");
+    ActorRef<String> secondRef = getContext().spawn(Behaviors.empty(), "second-actor");
     System.out.println("Second: " + secondRef);
     return this;
   }
@@ -51,11 +49,14 @@ class PrintMyActorRefActor extends AbstractBehavior<String> {
 class StartStopActor1 extends AbstractBehavior<String> {
 
   static Behavior<String> create() {
-    return Behaviors.setup(context -> new StartStopActor1());
+    return Behaviors.setup(StartStopActor1::new);
   }
 
-  private StartStopActor1() {
+  private StartStopActor1(ActorContext<String> context) {
+    super(context);
     System.out.println("first started");
+
+    context.spawn(StartStopActor2.create(), "second");
   }
 
   @Override
@@ -75,10 +76,11 @@ class StartStopActor1 extends AbstractBehavior<String> {
 class StartStopActor2 extends AbstractBehavior<String> {
 
   static Behavior<String> create() {
-    return Behaviors.setup(context -> new StartStopActor2());
+    return Behaviors.setup(StartStopActor2::new);
   }
 
-  private StartStopActor2() {
+  private StartStopActor2(ActorContext<String> context) {
+    super(context);
     System.out.println("second started");
   }
 
@@ -104,6 +106,7 @@ class SupervisingActor extends AbstractBehavior<String> {
   private final ActorRef<String> child;
 
   private SupervisingActor(ActorContext<String> context) {
+    super(context);
     child =
         context.spawn(
             Behaviors.supervise(SupervisedActor.create()).onFailure(SupervisorStrategy.restart()),
@@ -124,10 +127,11 @@ class SupervisingActor extends AbstractBehavior<String> {
 class SupervisedActor extends AbstractBehavior<String> {
 
   static Behavior<String> create() {
-    return Behaviors.setup(context -> new SupervisedActor());
+    return Behaviors.setup(SupervisedActor::new);
   }
 
-  private SupervisedActor() {
+  private SupervisedActor(ActorContext<String> context) {
+    super(context);
     System.out.println("supervised actor started");
   }
 
@@ -165,10 +169,8 @@ class Main extends AbstractBehavior<String> {
     return Behaviors.setup(Main::new);
   }
 
-  private final ActorContext<String> context;
-
   private Main(ActorContext<String> context) {
-    this.context = context;
+    super(context);
   }
 
   @Override
@@ -177,7 +179,7 @@ class Main extends AbstractBehavior<String> {
   }
 
   private Behavior<String> start() {
-    ActorRef<String> firstRef = context.spawn(PrintMyActorRefActor.create(), "first-actor");
+    ActorRef<String> firstRef = getContext().spawn(PrintMyActorRefActor.create(), "first-actor");
 
     System.out.println("First: " + firstRef);
     firstRef.tell("printit");
@@ -193,25 +195,28 @@ public class ActorHierarchyExperiments {
 }
 // #print-refs
 
-class ActorHierarchyExperimentsTest extends JUnitSuite {
+class StartingActorHierarchyActors {
 
-  @ClassRule public static final TestKitJunitResource testKit = new TestKitJunitResource();
-
-  @Test
-  public void testStartAndStopActors() {
-    // #start-stop-main
-    ActorRef<String> first = testKit.spawn(StartStopActor1.create(), "first");
-    first.tell("stop");
-    // #start-stop-main
+  public void showStartAndStopActors() {
+    Behaviors.setup(
+        context -> {
+          // #start-stop-main
+          ActorRef<String> first = context.spawn(StartStopActor1.create(), "first");
+          first.tell("stop");
+          // #start-stop-main
+          return Behaviors.empty();
+        });
   }
 
-  @Test
-  public void testSuperviseActors() throws Exception {
-    // #supervise-main
-    ActorRef<String> supervisingActor =
-        testKit.spawn(SupervisingActor.create(), "supervising-actor");
-    supervisingActor.tell("failChild");
-    // #supervise-main
-    Thread.sleep(200); // allow for the println/logging to complete
+  public void showSuperviseActors() {
+    Behaviors.setup(
+        context -> {
+          // #supervise-main
+          ActorRef<String> supervisingActor =
+              context.spawn(SupervisingActor.create(), "supervising-actor");
+          supervisingActor.tell("failChild");
+          // #supervise-main
+          return Behaviors.empty();
+        });
   }
 }

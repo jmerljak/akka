@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.persistence.typed.internal
@@ -8,12 +8,14 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
 import akka.actor.typed
+import akka.actor.typed.ActorRef
 import akka.actor.typed.BackoffSupervisorStrategy
 import akka.actor.typed.Behavior
 import akka.actor.typed.BehaviorInterceptor
 import akka.actor.typed.PostStop
 import akka.actor.typed.Signal
 import akka.actor.typed.SupervisorStrategy
+import akka.actor.typed.internal.ActorContextImpl
 import akka.actor.typed.scaladsl.ActorContext
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.scaladsl.LoggerOps
@@ -28,14 +30,15 @@ import akka.persistence.typed.DeleteSnapshotsCompleted
 import akka.persistence.typed.DeleteSnapshotsFailed
 import akka.persistence.typed.DeletionTarget
 import akka.persistence.typed.EventAdapter
-import akka.persistence.typed.SnapshotAdapter
 import akka.persistence.typed.NoOpEventAdapter
+import akka.persistence.typed.scaladsl.{ Recovery => TypedRecovery }
 import akka.persistence.typed.PersistenceId
+import akka.persistence.typed.SnapshotAdapter
 import akka.persistence.typed.SnapshotCompleted
 import akka.persistence.typed.SnapshotFailed
 import akka.persistence.typed.SnapshotSelectionCriteria
-import akka.persistence.typed.scaladsl.RetentionCriteria
 import akka.persistence.typed.scaladsl._
+import akka.persistence.typed.scaladsl.RetentionCriteria
 import akka.util.ConstantFun
 import akka.util.unused
 
@@ -54,6 +57,17 @@ private[akka] object EventSourcedBehaviorImpl {
     }
   }
   final case class WriterIdentity(instanceId: Int, writerUuid: String)
+
+  /**
+   * Used by EventSourcedBehaviorTestKit to retrieve the `persistenceId`.
+   */
+  final case class GetPersistenceId(replyTo: ActorRef[PersistenceId]) extends Signal
+
+  /**
+   * Used by EventSourcedBehaviorTestKit to retrieve the state.
+   * Can't be a Signal because those are not stashed.
+   */
+  final case class GetState[State](replyTo: ActorRef[State]) extends InternalProtocol
 
 }
 
@@ -83,7 +97,11 @@ private[akka] final case class EventSourcedBehaviorImpl[Command, Event, State](
 
   override def apply(context: typed.TypedActorContext[Command]): Behavior[Command] = {
     val ctx = context.asScala
-    ctx.setLoggerName(loggerClass)
+    val hasCustomLoggerName = ctx match {
+      case internalCtx: ActorContextImpl[_] => internalCtx.hasCustomLoggerName
+      case _                                => false
+    }
+    if (!hasCustomLoggerName) ctx.setLoggerName(loggerClass)
     val settings = EventSourcedSettings(ctx.system, journalPluginId.getOrElse(""), snapshotPluginId.getOrElse(""))
 
     // stashState outside supervise because StashState should survive restarts due to persist failures
@@ -107,6 +125,7 @@ private[akka] final case class EventSourcedBehaviorImpl[Command, Event, State](
         ctx.log.debug("Events successfully deleted to sequence number [{}].", toSequenceNr)
       case (_, DeleteEventsFailed(toSequenceNr, failure)) =>
         ctx.log.warn2("Failed to delete events to sequence number [{}] due to: {}", toSequenceNr, failure.getMessage)
+      case (_, EventSourcedBehaviorImpl.GetPersistenceId(replyTo)) => replyTo ! persistenceId
     }
 
     // do this once, even if the actor is restarted
@@ -215,6 +234,9 @@ private[akka] final case class EventSourcedBehaviorImpl[Command, Event, State](
       backoffStrategy: BackoffSupervisorStrategy): EventSourcedBehavior[Command, Event, State] =
     copy(supervisionStrategy = backoffStrategy)
 
+  override def withRecovery(recovery: TypedRecovery): EventSourcedBehavior[Command, Event, State] = {
+    copy(recovery = recovery.toClassic)
+  }
 }
 
 /** Protocol used internally by the eventsourced behaviors. */

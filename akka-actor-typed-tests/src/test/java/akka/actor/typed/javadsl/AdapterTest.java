@@ -1,14 +1,15 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed.javadsl;
 
 import akka.actor.testkit.typed.javadsl.LogCapturing;
+import akka.actor.typed.internal.adapter.SchedulerAdapter;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
-import org.scalatest.junit.JUnitSuite;
+import org.scalatestplus.junit.JUnitSuite;
 
 import java.time.Duration;
 
@@ -22,6 +23,8 @@ import akka.actor.typed.Terminated;
 import akka.testkit.javadsl.TestKit;
 import akka.actor.SupervisorStrategy;
 import static akka.actor.typed.javadsl.Behaviors.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertSame;
 
 public class AdapterTest extends JUnitSuite {
 
@@ -362,5 +365,13 @@ public class AdapterTest extends JUnitSuite {
         Adapter.spawnAnonymous(system, Typed1.create(ignore, probe.getRef()));
     typedRef.tell("stop-self");
     probe.expectMsgClass(IllegalArgumentException.class);
+  }
+
+  @Test
+  public void shouldConvertScheduler() {
+    akka.actor.typed.Scheduler typedScheduler = Adapter.toTyped(system.scheduler());
+    assertEquals(SchedulerAdapter.class, typedScheduler.getClass());
+    akka.actor.Scheduler classicScheduler = Adapter.toClassic(typedScheduler);
+    assertSame(system.scheduler(), classicScheduler);
   }
 }

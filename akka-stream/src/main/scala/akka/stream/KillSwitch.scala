@@ -1,17 +1,17 @@
 /*
- * Copyright (C) 2015-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2015-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.stream
 
-import akka.{ Done, NotUsed }
-import akka.stream.stage._
+import java.util.concurrent.atomic.AtomicReference
 
-import scala.concurrent.{ Future, Promise }
 import scala.collection.concurrent.TrieMap
+import scala.concurrent.{ Future, Promise }
 import scala.util.{ Failure, Success, Try }
 
-import java.util.concurrent.atomic.AtomicReference
+import akka.{ Done, NotUsed }
+import akka.stream.stage._
 
 /**
  * Creates shared or single kill switches which can be used to control completion of graphs from the outside.
@@ -61,7 +61,7 @@ object KillSwitches {
         case _            =>
           // callback.invoke is a simple actor send, so it is fine to run on the invoking thread
           terminationSignal.onComplete(getAsyncCallback[Try[Done]](onSwitch).invoke)(
-            akka.dispatch.ExecutionContexts.sameThreadExecutionContext)
+            akka.dispatch.ExecutionContexts.parasitic)
       }
     }
 
@@ -78,7 +78,7 @@ object KillSwitches {
     override def toString: String = "UniqueKillSwitchFlow"
 
     override def createLogicAndMaterializedValue(attr: Attributes) = {
-      val promise = Promise[Done]
+      val promise = Promise[Done]()
       val switch = new UniqueKillSwitch(promise)
 
       val logic = new KillableGraphStageLogic(promise.future, shape) with InHandler with OutHandler {
@@ -104,7 +104,7 @@ object KillSwitches {
     override def toString: String = "UniqueKillSwitchBidi"
 
     override def createLogicAndMaterializedValue(attr: Attributes) = {
-      val promise = Promise[Done]
+      val promise = Promise[Done]()
       val switch = new UniqueKillSwitch(promise)
 
       val logic = new KillableGraphStageLogic(promise.future, shape) {
@@ -146,12 +146,12 @@ object KillSwitches {
 trait KillSwitch {
 
   /**
-   * After calling [[KillSwitch#shutdown()]] the linked [[Graph]]s of [[FlowShape]] are completed normally.
+   * After calling [[KillSwitch#shutdown]] the linked [[Graph]]s of [[FlowShape]] are completed normally.
    */
   def shutdown(): Unit
 
   /**
-   * After calling [[KillSwitch#abort()]] the linked [[Graph]]s of [[FlowShape]] are failed.
+   * After calling [[KillSwitch#abort]] the linked [[Graph]]s of [[FlowShape]] are failed.
    */
   def abort(ex: Throwable): Unit
 }
@@ -159,7 +159,7 @@ trait KillSwitch {
 
 private[stream] final class TerminationSignal {
   final class Listener private[TerminationSignal] {
-    private[TerminationSignal] val promise = Promise[Done]
+    private[TerminationSignal] val promise = Promise[Done]()
     def future: Future[Done] = promise.future
     def unregister(): Unit = removeListener(this)
   }
@@ -194,11 +194,11 @@ private[stream] final class TerminationSignal {
  * A [[UniqueKillSwitch]] is always a result of a materialization (unlike [[SharedKillSwitch]] which is constructed
  * before any materialization) and it always controls that graph and operator which yielded the materialized value.
  *
- * After calling [[UniqueKillSwitch#shutdown()]] the running instance of the [[Graph]] of [[FlowShape]] that materialized to the
+ * After calling [[UniqueKillSwitch#shutdown]] the running instance of the [[Graph]] of [[FlowShape]] that materialized to the
  * [[UniqueKillSwitch]] will complete its downstream and cancel its upstream (unless if finished or failed already in which
  * case the command is ignored). Subsequent invocations of completion commands will be ignored.
  *
- * After calling [[UniqueKillSwitch#abort()]] the running instance of the [[Graph]] of [[FlowShape]] that materialized to the
+ * After calling [[UniqueKillSwitch#abort]] the running instance of the [[Graph]] of [[FlowShape]] that materialized to the
  * [[UniqueKillSwitch]] will fail its downstream with the provided exception and cancel its upstream
  * (unless if finished or failed already in which case the command is ignored). Subsequent invocations of
  * completion commands will be ignored.
@@ -209,14 +209,14 @@ private[stream] final class TerminationSignal {
 final class UniqueKillSwitch private[stream] (private val promise: Promise[Done]) extends KillSwitch {
 
   /**
-   * After calling [[UniqueKillSwitch#shutdown()]] the running instance of the [[Graph]] of [[FlowShape]] that materialized to the
+   * After calling [[UniqueKillSwitch#shutdown]] the running instance of the [[Graph]] of [[FlowShape]] that materialized to the
    * [[UniqueKillSwitch]] will complete its downstream and cancel its upstream (unless if finished or failed already in which
    * case the command is ignored). Subsequent invocations of completion commands will be ignored.
    */
   def shutdown(): Unit = promise.trySuccess(Done)
 
   /**
-   * After calling [[UniqueKillSwitch#abort()]] the running instance of the [[Graph]] of [[FlowShape]] that materialized to the
+   * After calling [[UniqueKillSwitch#abort]] the running instance of the [[Graph]] of [[FlowShape]] that materialized to the
    * [[UniqueKillSwitch]] will fail its downstream with the provided exception and cancel its upstream
    * (unless if finished or failed already in which case the command is ignored). Subsequent invocations of
    * completion commands will be ignored.
@@ -232,15 +232,15 @@ final class UniqueKillSwitch private[stream] (private val promise: Promise[Done]
  * belongs to the switch from which it was acquired. Multiple [[SharedKillSwitch]] instances are isolated from each other,
  * shutting down or aborting on instance does not affect the [[Graph]]s provided by another instance.
  *
- * After calling [[SharedKillSwitch#shutdown()]] all materialized, running instances of all [[Graph]]s provided by the
+ * After calling [[SharedKillSwitch#shutdown]] all materialized, running instances of all [[Graph]]s provided by the
  * [[SharedKillSwitch]] will complete their downstreams and cancel their upstreams (unless if finished or failed already in which
- * case the command is ignored). Subsequent invocations of [[SharedKillSwitch#shutdown()]] and [[SharedKillSwitch#abort()]] will be
+ * case the command is ignored). Subsequent invocations of [[SharedKillSwitch#shutdown]] and [[SharedKillSwitch#abort]] will be
  * ignored.
  *
- * After calling [[SharedKillSwitch#abort()]] all materialized, running instances of all [[Graph]]s provided by the
+ * After calling [[SharedKillSwitch#abort]] all materialized, running instances of all [[Graph]]s provided by the
  * [[SharedKillSwitch]] will fail their downstreams with the provided exception and cancel their upstreams
  * (unless it finished or failed already in which case the command is ignored). Subsequent invocations of
- * [[SharedKillSwitch#shutdown()]] and [[SharedKillSwitch#abort()]] will be ignored.
+ * [[SharedKillSwitch#shutdown]] and [[SharedKillSwitch#abort]] will be ignored.
  *
  * The [[Graph]]s provided by the [[SharedKillSwitch]] do not modify the passed through elements in any way or affect
  * backpressure in the stream. All provided [[Graph]]s provide the parent [[SharedKillSwitch]] as materialized value.
@@ -252,18 +252,18 @@ final class SharedKillSwitch private[stream] (val name: String) extends KillSwit
   private[this] val _flow: Graph[FlowShape[Any, Any], SharedKillSwitch] = new SharedKillSwitchFlow
 
   /**
-   * After calling [[SharedKillSwitch#shutdown()]] all materialized, running instances of all [[Graph]]s provided by the
+   * After calling [[SharedKillSwitch#shutdown]] all materialized, running instances of all [[Graph]]s provided by the
    * [[SharedKillSwitch]] will complete their downstreams and cancel their upstreams (unless if finished or failed already in which
-   * case the command is ignored). Subsequent invocations of [[SharedKillSwitch#shutdown()]] and [[SharedKillSwitch#abort()]] will be
+   * case the command is ignored). Subsequent invocations of [[SharedKillSwitch#shutdown]] and [[SharedKillSwitch#abort]] will be
    * ignored.
    */
   def shutdown(): Unit = terminationSignal.tryComplete(Success(Done))
 
   /**
-   * After calling [[SharedKillSwitch#abort()]] all materialized, running instances of all [[Graph]]s provided by the
+   * After calling [[SharedKillSwitch#abort]] all materialized, running instances of all [[Graph]]s provided by the
    * [[SharedKillSwitch]] will fail their downstreams with the provided exception and cancel their upstreams
    * (unless it finished or failed already in which case the command is ignored). Subsequent invocations of
-   * [[SharedKillSwitch#shutdown()]] and [[SharedKillSwitch#abort()]] will be ignored.
+   * [[SharedKillSwitch#shutdown]] and [[SharedKillSwitch#abort]] will be ignored.
    *
    * These provided [[Graph]]s materialize to their owning switch. This might make certain integrations simpler than
    * passing around the switch instance itself.
@@ -274,7 +274,7 @@ final class SharedKillSwitch private[stream] (val name: String) extends KillSwit
 
   /**
    * Returns a typed Flow of a requested type that will be linked to this [[SharedKillSwitch]] instance. By invoking
-   * [[SharedKillSwitch#shutdown()]] or [[SharedKillSwitch#abort()]] all running instances of all provided [[Graph]]s by this
+   * [[SharedKillSwitch#shutdown]] or [[SharedKillSwitch#abort]] all running instances of all provided [[Graph]]s by this
    * switch will be stopped normally or failed.
    *
    * @tparam T Type of the elements the Flow will forward
@@ -292,8 +292,9 @@ final class SharedKillSwitch private[stream] (val name: String) extends KillSwit
     override def createLogicAndMaterializedValue(
         inheritedAttributes: Attributes): (GraphStageLogic, SharedKillSwitch) = {
       val shutdownListener = terminationSignal.createListener()
-      val logic = new KillSwitches.KillableGraphStageLogic(shutdownListener.future, shape) with InHandler
-      with OutHandler {
+      val logic = new KillSwitches.KillableGraphStageLogic(shutdownListener.future, shape)
+        with InHandler
+        with OutHandler {
         setHandler(shape.in, this)
         setHandler(shape.out, this)
 

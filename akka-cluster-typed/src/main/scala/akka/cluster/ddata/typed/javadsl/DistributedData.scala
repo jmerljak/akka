@@ -1,16 +1,16 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster.ddata.typed.javadsl
 
 import java.util.function.{ Function => JFunction }
 
+import akka.actor.typed.ActorRef
 import akka.actor.typed.ActorSystem
+import akka.actor.typed.Behavior
 import akka.actor.typed.Extension
 import akka.actor.typed.ExtensionId
-import akka.actor.typed.ActorRef
-import akka.actor.typed.Behavior
 import akka.actor.typed.ExtensionSetup
 import akka.actor.typed.javadsl.Behaviors
 import akka.annotation.DoNotInherit
@@ -99,9 +99,7 @@ abstract class DistributedData extends Extension {
 
 object DistributedDataSetup {
   def apply[T <: Extension](createExtension: ActorSystem[_] => DistributedData): DistributedDataSetup =
-    new DistributedDataSetup(new java.util.function.Function[ActorSystem[_], DistributedData] {
-      override def apply(sys: ActorSystem[_]): DistributedData = createExtension(sys)
-    }) // TODO can be simplified when compiled only with Scala >= 2.12
+    new DistributedDataSetup(createExtension(_))
 
 }
 

@@ -1,15 +1,16 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed
 
-import akka.annotation.InternalApi
-
-import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.duration.Duration
-import akka.util.JavaDurationConverters._
+import scala.concurrent.duration.FiniteDuration
+
 import org.slf4j.event.Level
+
+import akka.annotation.InternalApi
+import akka.util.JavaDurationConverters._
 
 object SupervisorStrategy {
 
@@ -57,7 +58,7 @@ object SupervisorStrategy {
    * The strategy is applied also if the actor behavior is deferred and throws an exception during
    * startup.
    *
-   * A maximum number of restarts can be specified with [[Backoff#withMaxRestarts]]
+   * A maximum number of restarts can be specified with [[BackoffSupervisorStrategy#withMaxRestarts]]
    *
    * @param minBackoff minimum (initial) duration until the child actor will
    *   started again, if it is terminated

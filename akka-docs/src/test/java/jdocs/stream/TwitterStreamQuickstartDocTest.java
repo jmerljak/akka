@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2015-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package jdocs.stream;
@@ -144,8 +144,7 @@ public class TwitterStreamQuickstartDocTest extends AbstractJavaTest {
       }
 
       public Set<Hashtag> hashtags() {
-        return Arrays.asList(body.split(" "))
-            .stream()
+        return Arrays.asList(body.split(" ")).stream()
             .filter(a -> a.startsWith("#"))
             .map(a -> new Hashtag(a))
             .collect(Collectors.toSet());

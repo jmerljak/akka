@@ -1,17 +1,19 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor
 
+import java.util.UUID.{ randomUUID => newUuid }
+import java.util.concurrent.atomic._
+
+import scala.concurrent.Await
+
 import org.scalatest.BeforeAndAfterEach
 
 import akka.actor.Actor._
-import akka.testkit._
-import java.util.concurrent.atomic._
-import scala.concurrent.Await
 import akka.pattern.ask
-import java.util.UUID.{ randomUUID => newUuid }
+import akka.testkit._
 
 object ActorLifeCycleSpec {
 
@@ -26,11 +28,7 @@ object ActorLifeCycleSpec {
 
 }
 
-class ActorLifeCycleSpec
-    extends AkkaSpec("akka.actor.serialize-messages=off")
-    with BeforeAndAfterEach
-    with ImplicitSender
-    with DefaultTimeout {
+class ActorLifeCycleSpec extends AkkaSpec with BeforeAndAfterEach with ImplicitSender with DefaultTimeout {
   import ActorLifeCycleSpec._
 
   "An Actor" must {
@@ -118,7 +116,7 @@ class ActorLifeCycleSpec
       system.stop(supervisor)
     }
 
-    "log failues in postStop" in {
+    "log failures in postStop" in {
       val a = system.actorOf(Props(new Actor {
         def receive = Actor.emptyBehavior
         override def postStop: Unit = { throw new Exception("hurrah") }

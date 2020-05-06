@@ -4,13 +4,11 @@ Combines elements from multiple sources through a `combine` function and passes 
 
 @ref[Fan-in operators](../index.md#fan-in-operators)
 
-@@@div { .group-scala }
-
 ## Signature
 
-@@signature [Flow.scala](/akka-stream/src/main/scala/akka/stream/scaladsl/Flow.scala) { #zipLatestWith }
+@apidoc[Source.zipLatestWith](Source) { scala="#zipLatestWith[Out2,Out3](that:akka.stream.Graph[akka.stream.SourceShape[Out2],_])(combine:(Out,Out2)=&gt;Out3):FlowOps.this.Repr[Out3]" java="#zipLatestWith(akka.stream.Graph,akka.japi.function.Function2)" }
+@apidoc[Flow.zipLatestWith](Flow) { scala="#zipLatestWith[Out2,Out3](that:akka.stream.Graph[akka.stream.SourceShape[Out2],_])(combine:(Out,Out2)=&gt;Out3):FlowOps.this.Repr[Out3]" java="#zipLatestWith(akka.stream.Graph,akka.japi.function.Function2)" }
 
-@@@
 
 ## Description
 
@@ -18,6 +16,8 @@ Combines elements from each of multiple sources into @scala[tuples] @java[*Pair*
 
 No element is emitted until at least one element from each Source becomes available. Whenever a new
 element appears, the zipping function is invoked with a tuple containing the new element and the last seen element of the other stream.
+
+## Reactive Streams semantics
 
 @@@div { .callout }
 

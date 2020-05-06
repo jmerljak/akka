@@ -1,19 +1,20 @@
 /*
- * Copyright (C) 2018-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.io.dns
 
-import akka.util.ccompat.JavaConverters._
-import akka.testkit.AkkaSpec
+import scala.concurrent.duration._
+import scala.util.Try
+import scala.util.control.NonFatal
+
 import com.spotify.docker.client.DefaultDockerClient
 import com.spotify.docker.client.DockerClient.{ ListContainersParam, LogsParam }
 import com.spotify.docker.client.messages.{ ContainerConfig, HostConfig, PortBinding }
 import org.scalatest.concurrent.Eventually
 
-import scala.concurrent.duration._
-import scala.util.Try
-import scala.util.control.NonFatal
+import akka.testkit.AkkaSpec
+import akka.util.ccompat.JavaConverters._
 
 trait DockerBindDnsService extends Eventually { self: AkkaSpec =>
   val client = DefaultDockerClient.fromEnv().build()
@@ -78,6 +79,11 @@ trait DockerBindDnsService extends Eventually { self: AkkaSpec =>
     eventually(timeout(25.seconds)) {
       client.logs(creation.id(), LogsParam.stderr()).readFully() should include("all zones loaded")
     }
+  }
+
+  def dumpNameserverLogs(): Unit = {
+    id.foreach(id => log.info("Nameserver std out: {} ", client.logs(id, LogsParam.stdout()).readFully()))
+    id.foreach(id => log.info("Nameserver std err: {} ", client.logs(id, LogsParam.stderr()).readFully()))
   }
 
   override def afterTermination(): Unit = {

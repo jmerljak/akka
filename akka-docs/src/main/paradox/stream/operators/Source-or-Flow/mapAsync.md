@@ -4,13 +4,11 @@ Pass incoming elements to a function that return a @scala[`Future`] @java[`Compl
 
 @ref[Asynchronous operators](../index.md#asynchronous-operators)
 
-@@@div { .group-scala }
-
 ## Signature
 
-@@signature [Flow.scala](/akka-stream/src/main/scala/akka/stream/scaladsl/Flow.scala) { #mapAsync }
+@apidoc[Source.mapAsync](Source) { scala="#mapAsync[T](parallelism:Int)(f:Out=&gt;scala.concurrent.Future[T]):FlowOps.this.Repr[T]" java="#mapAsync(int,akka.japi.function.Function)" }
+@apidoc[Flow.mapAsync](Flow) { scala="#mapAsync[T](parallelism:Int)(f:Out=&gt;scala.concurrent.Future[T]):FlowOps.this.Repr[T]" java="#mapAsync(int,akka.japi.function.Function)" }
 
-@@@
 
 ## Description
 
@@ -21,6 +19,7 @@ order will be kept when results complete. For use cases where order does not mat
 If a @scala[`Future`] @java[`CompletionStage`] completes with `null`, element is not passed downstream.
 If a @scala[`Future`] @java[`CompletionStage`] fails, the stream also fails (unless a different supervision strategy is applied)
 
+## Reactive Streams semantics
 
 @@@div { .callout }
 

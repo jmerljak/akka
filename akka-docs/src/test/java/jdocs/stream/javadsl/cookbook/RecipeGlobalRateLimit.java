@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2015-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package jdocs.stream.javadsl.cookbook;
@@ -142,8 +142,7 @@ public class RecipeGlobalRateLimit extends RecipeTest {
     @Override
     public void postStop() {
       replenishTimer.cancel();
-      waitQueue
-          .stream()
+      waitQueue.stream()
           .forEach(
               ref -> {
                 ref.tell(

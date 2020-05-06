@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2016-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.remote.artery
@@ -7,6 +7,14 @@ package aeron
 
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
+
+import scala.concurrent.Await
+import scala.concurrent.duration._
+
+import com.typesafe.config.ConfigFactory
+import io.aeron.Aeron
+import io.aeron.driver.MediaDriver
+import org.agrona.IoUtil
 
 import akka.Done
 import akka.actor.ExtendedActorSystem
@@ -20,13 +28,6 @@ import akka.stream.ThrottleMode
 import akka.stream.scaladsl.Source
 import akka.testkit._
 import akka.util.ByteString
-import com.typesafe.config.ConfigFactory
-import io.aeron.Aeron
-import io.aeron.driver.MediaDriver
-import org.agrona.IoUtil
-
-import scala.concurrent.Await
-import scala.concurrent.duration._
 
 object AeronStreamConsistencySpec extends MultiNodeConfig {
   val first = role("first")
@@ -97,7 +98,7 @@ abstract class AeronStreamConsistencySpec
   "Message consistency of Aeron Streams" must {
 
     "start upd port" in {
-      system.actorOf(Props[UdpPortActor], "updPort")
+      system.actorOf(Props[UdpPortActor](), "updPort")
       enterBarrier("udp-port-started")
     }
 
@@ -105,9 +106,16 @@ abstract class AeronStreamConsistencySpec
       runOn(second) {
         // just echo back
         Source
-          .fromGraph(new AeronSource(channel(second), streamId, aeron, taskRunner, pool, IgnoreEventSink, 0))
+          .fromGraph(new AeronSource(channel(second), streamId, aeron, taskRunner, pool, NoOpRemotingFlightRecorder, 0))
           .runWith(
-            new AeronSink(channel(first), streamId, aeron, taskRunner, pool, giveUpMessageAfter, IgnoreEventSink))
+            new AeronSink(
+              channel(first),
+              streamId,
+              aeron,
+              taskRunner,
+              pool,
+              giveUpMessageAfter,
+              NoOpRemotingFlightRecorder))
       }
       enterBarrier("echo-started")
     }
@@ -121,7 +129,7 @@ abstract class AeronStreamConsistencySpec
         val started = TestProbe()
         val startMsg = "0".getBytes("utf-8")
         Source
-          .fromGraph(new AeronSource(channel(first), streamId, aeron, taskRunner, pool, IgnoreEventSink, 0))
+          .fromGraph(new AeronSource(channel(first), streamId, aeron, taskRunner, pool, NoOpRemotingFlightRecorder, 0))
           .via(killSwitch.flow)
           .runForeach { envelope =>
             val bytes = ByteString.fromByteBuffer(envelope.byteBuffer)
@@ -151,7 +159,14 @@ abstract class AeronStreamConsistencySpec
             }
             .throttle(1, 200.milliseconds, 1, ThrottleMode.Shaping)
             .runWith(
-              new AeronSink(channel(second), streamId, aeron, taskRunner, pool, giveUpMessageAfter, IgnoreEventSink))
+              new AeronSink(
+                channel(second),
+                streamId,
+                aeron,
+                taskRunner,
+                pool,
+                giveUpMessageAfter,
+                NoOpRemotingFlightRecorder))
           started.expectMsg(Done)
         }
 
@@ -164,7 +179,14 @@ abstract class AeronStreamConsistencySpec
             envelope
           }
           .runWith(
-            new AeronSink(channel(second), streamId, aeron, taskRunner, pool, giveUpMessageAfter, IgnoreEventSink))
+            new AeronSink(
+              channel(second),
+              streamId,
+              aeron,
+              taskRunner,
+              pool,
+              giveUpMessageAfter,
+              NoOpRemotingFlightRecorder))
 
         Await.ready(done, 20.seconds)
         killSwitch.shutdown()

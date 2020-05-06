@@ -1,19 +1,21 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster
 
-import akka.actor.{ Actor, ActorLogging, ActorSelection, Address, NoSerializationVerificationNeeded }
+import scala.collection.SortedSet
+import scala.collection.immutable
+
+import akka.actor.{ Actor, ActorSelection, Address, NoSerializationVerificationNeeded }
 import akka.annotation.InternalApi
 import akka.cluster.ClusterEvent._
 import akka.cluster.ClusterSettings.DataCenter
+import akka.event.ActorWithLogClass
+import akka.event.Logging
 import akka.remote.FailureDetectorRegistry
 import akka.util.ConstantFun
 import akka.util.ccompat._
-
-import scala.collection.SortedSet
-import scala.collection.immutable
 
 /**
  * INTERNAL API
@@ -34,16 +36,20 @@ import scala.collection.immutable
  */
 @InternalApi
 @ccompatUsedUntil213
-private[cluster] class CrossDcHeartbeatSender extends Actor with ActorLogging {
+private[cluster] class CrossDcHeartbeatSender extends Actor {
   import CrossDcHeartbeatSender._
 
   val cluster = Cluster(context.system)
-  import cluster.ClusterLogger._
 
   val verboseHeartbeat = cluster.settings.Debug.VerboseHeartbeatLogging
-  import cluster.settings._
   import cluster.{ scheduler, selfAddress, selfDataCenter, selfUniqueAddress }
+  import cluster.settings._
   import context.dispatcher
+
+  private val clusterLogger =
+    new cluster.ClusterLogger(
+      Logging.withMarker(context.system, ActorWithLogClass(this, ClusterLogClass.ClusterHeartbeat)))
+  import clusterLogger._
 
   // For inspecting if in active state; allows avoiding "becoming active" when already active
   var activelyMonitoring = false
@@ -78,7 +84,8 @@ private[cluster] class CrossDcHeartbeatSender extends Actor with ActorLogging {
 
   override def preStart(): Unit = {
     cluster.subscribe(self, classOf[MemberEvent])
-    if (verboseHeartbeat) log.debug("Initialized cross-dc heartbeat sender as DORMANT in DC: [{}]", selfDataCenter)
+    if (verboseHeartbeat)
+      clusterLogger.logDebug("Initialized cross-dc heartbeat sender as DORMANT in DC: [{}]", selfDataCenter)
   }
 
   override def postStop(): Unit = {
@@ -143,7 +150,7 @@ private[cluster] class CrossDcHeartbeatSender extends Actor with ActorLogging {
       // since we only monitor nodes in Up or later states, due to the n-th oldest requirement
       dataCentersState = dataCentersState.addMember(m)
       if (verboseHeartbeat && m.dataCenter != selfDataCenter)
-        log.debug("Register member {} for cross DC heartbeat (will only heartbeat if oldest)", m)
+        clusterLogger.logDebug("Register member {} for cross DC heartbeat (will only heartbeat if oldest)", m)
 
       becomeActiveIfResponsibleForHeartbeat()
     }
@@ -192,14 +199,14 @@ private[cluster] class CrossDcHeartbeatSender extends Actor with ActorLogging {
   /** Idempotent, become active if this node is n-th oldest and should monitor other nodes */
   private def becomeActiveIfResponsibleForHeartbeat(): Unit = {
     if (!activelyMonitoring && selfIsResponsibleForCrossDcHeartbeat()) {
-      log.info(
+      logInfo(
         "Cross DC heartbeat becoming ACTIVE on this node (for DC: {}), monitoring other DCs oldest nodes",
         selfDataCenter)
       activelyMonitoring = true
 
       context.become(active.orElse(introspecting))
     } else if (!activelyMonitoring)
-      if (verboseHeartbeat) log.info("Remaining DORMANT; others in {} handle heartbeating other DCs", selfDataCenter)
+      if (verboseHeartbeat) logInfo("Remaining DORMANT; others in {} handle heartbeating other DCs", selfDataCenter)
   }
 
 }

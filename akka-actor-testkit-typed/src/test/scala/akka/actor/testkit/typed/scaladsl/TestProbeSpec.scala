@@ -1,16 +1,17 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.testkit.typed.scaladsl
 
-import akka.actor.typed.scaladsl.Behaviors
-import com.typesafe.config.ConfigFactory
-
 import scala.concurrent.duration._
-import org.scalatest.WordSpecLike
 
-class TestProbeSpec extends ScalaTestWithActorTestKit with WordSpecLike with LogCapturing {
+import com.typesafe.config.ConfigFactory
+import org.scalatest.wordspec.AnyWordSpecLike
+
+import akka.actor.typed.scaladsl.Behaviors
+
+class TestProbeSpec extends ScalaTestWithActorTestKit with AnyWordSpecLike with LogCapturing {
 
   import TestProbeSpec._
 
@@ -47,7 +48,7 @@ class TestProbeSpec extends ScalaTestWithActorTestKit with WordSpecLike with Log
       val probe = TestProbe()
       val ref = spawn(Behaviors.receive[Stop.type]((_, _) =>
         Behaviors.withTimers { timer =>
-          timer.startSingleTimer("key", Stop, 300.millis)
+          timer.startSingleTimer(Stop, 300.millis)
 
           Behaviors.receive((_, _) => Behaviors.stopped)
         }))
@@ -148,7 +149,7 @@ class TestProbeSpec extends ScalaTestWithActorTestKit with WordSpecLike with Log
       val probe = createTestProbe[EventT]()
       eventsT(10).forall { e =>
         probe.ref ! e
-        probe.receiveMessage == e
+        probe.receiveMessage() == e
       } should ===(true)
 
       probe.expectNoMessage()
@@ -183,7 +184,7 @@ object TestProbeSpec {
 
 class TestProbeTimeoutSpec
     extends ScalaTestWithActorTestKit(TestProbeSpec.timeoutConfig)
-    with WordSpecLike
+    with AnyWordSpecLike
     with LogCapturing {
 
   import TestProbeSpec._

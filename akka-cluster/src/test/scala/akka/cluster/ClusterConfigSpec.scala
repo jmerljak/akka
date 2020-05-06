@@ -1,19 +1,20 @@
 /*
- * Copyright (C) 2009-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2009-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.cluster
 
-import language.postfixOps
 import scala.concurrent.duration._
-import com.typesafe.config.ConfigFactory
-import akka.testkit.AkkaSpec
-import akka.dispatch.Dispatchers
-import akka.remote.PhiAccrualFailureDetector
-import akka.util.Helpers.ConfigOps
-import akka.actor.Address
 
 import com.github.ghik.silencer.silent
+import com.typesafe.config.ConfigFactory
+import language.postfixOps
+
+import akka.actor.Address
+import akka.dispatch.Dispatchers
+import akka.remote.PhiAccrualFailureDetector
+import akka.testkit.AkkaSpec
+import akka.util.Helpers.ConfigOps
 
 @silent
 class ClusterConfigSpec extends AkkaSpec {
@@ -42,7 +43,6 @@ class ClusterConfigSpec extends AkkaSpec {
       LeaderActionsInterval should ===(1 second)
       UnreachableNodesReaperInterval should ===(1 second)
       PublishStatsInterval should ===(Duration.Undefined)
-      AutoDownUnreachableAfter should ===(Duration.Undefined)
       DownRemovalMargin should ===(Duration.Zero)
       MinNrOfMembers should ===(1)
       MinNrOfMembersOfRole should ===(Map.empty[String, Int])

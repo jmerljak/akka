@@ -1,20 +1,21 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed.scaladsl
-
-import akka.actor.ClassicActorContextProvider
-import akka.actor.typed._
-import akka.annotation.DoNotInherit
-import akka.util.Timeout
 
 import scala.concurrent.{ ExecutionContextExecutor, Future }
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.ClassTag
 import scala.util.Try
-import akka.annotation.InternalApi
+
 import org.slf4j.Logger
+
+import akka.actor.ClassicActorContextProvider
+import akka.actor.typed._
+import akka.annotation.DoNotInherit
+import akka.annotation.InternalApi
+import akka.util.Timeout
 
 /**
  * An Actor is given by the combination of a [[Behavior]] and a context in
@@ -143,8 +144,7 @@ trait ActorContext[T] extends TypedActorContext[T] with ClassicActorContextProvi
   /**
    * Register for [[akka.actor.typed.Terminated]] notification once the Actor identified by the
    * given [[ActorRef]] terminates. This message is also sent when the watched actor
-   * is on a node that has been removed from the cluster when using akka-cluster
-   * or has been marked unreachable when using akka-remote directly
+   * is on a node that has been removed from the cluster when using Akka Cluster.
    *
    * `watch` is idempotent if it is not mixed with `watchWith`.
    *
@@ -159,8 +159,7 @@ trait ActorContext[T] extends TypedActorContext[T] with ClassicActorContextProvi
   /**
    * Register for termination notification with a custom message once the Actor identified by the
    * given [[ActorRef]] terminates. This message is also sent when the watched actor
-   * is on a node that has been removed from the cluster when using akka-cluster
-   * or has been marked unreachable when using akka-remote directly.
+   * is on a node that has been removed from the cluster when using using Akka Cluster.
    *
    * `watchWith` is idempotent if it is called with the same `msg` and not mixed with `watch`.
    *

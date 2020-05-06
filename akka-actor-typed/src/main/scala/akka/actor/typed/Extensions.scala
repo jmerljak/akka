@@ -1,11 +1,11 @@
 /*
- * Copyright (C) 2017-2019 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2017-2020 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package akka.actor.typed
 
-import akka.annotation.DoNotInherit
 import akka.actor.setup.Setup
+import akka.annotation.DoNotInherit
 
 /**
  * Marker trait/interface for extensions. An extension can be registered in the ActorSystem and is guaranteed to only
@@ -174,6 +174,4 @@ abstract class ExtensionSetup[T <: Extension](
  * extension with stub/mock implementations.
  */
 abstract class AbstractExtensionSetup[T <: Extension](extId: ExtensionId[T], createExtension: ActorSystem[_] => T)
-    extends ExtensionSetup[T](extId, new java.util.function.Function[ActorSystem[_], T] {
-      override def apply(sys: ActorSystem[_]): T = createExtension.apply(sys)
-    }) // TODO can be simplified when compiled only with Scala >= 2.12
+    extends ExtensionSetup[T](extId, createExtension.apply)
